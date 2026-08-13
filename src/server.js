@@ -5,15 +5,22 @@ import express from 'express';
 
 import { openDatabase } from './database/connection.js';
 import { createApiRouter } from './api/routes.js';
+import { getPrivateIPv4Addresses, isLocalClient } from './network.js';
 
-const HOST = '127.0.0.1';
+const HOST = '0.0.0.0';
 const PORT = 3180;
 const publicPath = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
-export function createApp({ database } = {}) {
+export function createApp({ database, networkInfoProvider = getPrivateIPv4Addresses } = {}) {
   const app = express();
 
   app.disable('x-powered-by');
+  app.use((request, response, next) => {
+    if (!isLocalClient(request.socket.remoteAddress)) {
+      return response.status(403).json({ error: 'Acceso permitido solo desde la red local.' });
+    }
+    return next();
+  });
   app.use(express.json());
 
   app.get('/api/health', (_request, response) => {
@@ -21,8 +28,21 @@ export function createApp({ database } = {}) {
   });
 
   if (database) {
-    app.use('/api', createApiRouter(database));
+    app.use('/api', createApiRouter(database, { networkInfoProvider }));
   }
+
+  app.get('/mobile', (_request, response) => response.sendFile(resolve(publicPath, 'mobile.html')));
+  app.get('/vendor/zxing-browser.min.js', (_request, response) => {
+    response.sendFile(resolve(
+      dirname(fileURLToPath(import.meta.url)),
+      '..',
+      'node_modules',
+      '@zxing',
+      'browser',
+      'umd',
+      'zxing-browser.min.js',
+    ));
+  });
 
   app.use(express.static(publicPath));
 
@@ -39,6 +59,9 @@ export function startServer() {
   const app = createApp({ database });
   const server = app.listen(PORT, HOST, () => {
     console.log(`Inventario Terreno disponible en http://localhost:${PORT}`);
+    for (const { address } of getPrivateIPv4Addresses()) {
+      console.log(`Acceso móvil disponible en http://${address}:${PORT}/mobile`);
+    }
   });
 
   const close = () => {

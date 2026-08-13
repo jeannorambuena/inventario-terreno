@@ -4,7 +4,7 @@ Base segura para una aplicación local y offline de inventario en terreno para W
 
 ## Estado actual
 
-Este repositorio contiene únicamente la estructura inicial y las reglas de seguridad. La aplicación y sus dependencias todavía no están implementadas ni instaladas.
+El repositorio contiene el MVP local, su API, interfaces de notebook y móvil, importación protegida, persistencia SQLite y pruebas automatizadas. Los datos operativos permanecen exclusivamente en el equipo local y fuera de Git.
 
 ## Tecnología prevista
 
@@ -49,4 +49,16 @@ La implementación futura separará la interfaz, las rutas HTTP, la lógica de d
 └── tests/
 ```
 
-No hay comandos de instalación o ejecución todavía. Cuando el proyecto los incorpore, en Windows se deberá usar `npm.cmd` y `npx.cmd` si PowerShell bloquea `npm.ps1` o `npx.ps1`.
+## Instalación asistida por Codex en un nuevo equipo
+
+En Windows, Codex debe leer `AGENTS.md` y seguir [docs/INSTALACION-NUEVO-EQUIPO.md](docs/INSTALACION-NUEVO-EQUIPO.md). El flujo comienza con una elección explícita entre `NUEVO` y `RESTAURAR`, instala dependencias reproducibles mediante `npm.cmd ci`, ejecuta ambas suites y verifica la protección de datos antes de iniciar:
+
+```powershell
+.\scripts\setup.ps1 -Mode NUEVO
+.\scripts\verify.ps1
+.\scripts\start.ps1
+```
+
+Si la política local bloquea archivos `.ps1`, ejecútelos con `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...`; el bypass se limita al proceso actual y no cambia la configuración global.
+
+Para un traspaso, consulte también [docs/HANDOVER.md](docs/HANDOVER.md) y [docs/DATOS-LOCALES.md](docs/DATOS-LOCALES.md). Los scripts nunca eligen un modo, importan datos o sobrescriben una base existente de forma automática.

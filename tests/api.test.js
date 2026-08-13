@@ -28,7 +28,7 @@ beforeEach(() => {
   const asset = database.prepare(`
     INSERT INTO assets (
       asset_code, inventory_import_id, location_id, name, scanner_code
-    ) VALUES ('0010600073', ?, ?, 'Bien sintético', '0000000123')
+    ) VALUES ('SYN-BIEN-0001', ?, ?, 'Bien sintético', 'SYN-SCAN-0001')
     RETURNING id
   `).get(inventoryImport.id, location.id);
   const otherLocation = database.prepare(`
@@ -54,10 +54,10 @@ describe('inventory API', () => {
     const assets = await request(app).get(`/api/assets?locationId=${locationId}`).expect(200);
     expect(assets.body.assets).toHaveLength(1);
 
-    const search = await request(app).get('/api/assets/search?q=001060').expect(200);
+    const search = await request(app).get('/api/assets/search?q=SYN-SCAN').expect(200);
     expect(search.body.assets).toHaveLength(1);
 
-    const byCode = await request(app).get('/api/assets/by-code/0000000123').expect(200);
+    const byCode = await request(app).get('/api/assets/by-code/SYN-SCAN-0001').expect(200);
     expect(byCode.body.asset.id).toBe(assetId);
   });
 
@@ -182,7 +182,7 @@ describe('inventory API', () => {
       .expect(201);
   });
 
-  test('keeps the exact 12-item closing summary consistent before and after close', async () => {
+  test('blocks closing the exact 12-item session while 11 assets remain pending', async () => {
     const inventoryImportId = database
       .prepare("SELECT id FROM inventory_imports WHERE import_code = 'synthetic-import'")
       .get().id;
@@ -252,10 +252,10 @@ describe('inventory API', () => {
       .expect(200);
     expect(beforeClose.body.summary).toMatchObject({ status: 'open', ...expectedMetrics });
 
-    const afterClose = await request(app)
+    const blockedClose = await request(app)
       .post(`/api/sessions/${sessionId}/close`)
-      .expect(200);
-    expect(afterClose.body.summary).toMatchObject({ status: 'closed', ...expectedMetrics });
+      .expect(409);
+    expect(blockedClose.body.summary).toMatchObject({ status: 'open', ...expectedMetrics });
 
     const persistedLinks = database.prepare(`
       SELECT COUNT(*) AS count
@@ -265,7 +265,7 @@ describe('inventory API', () => {
     expect(persistedLinks.count).toBe(2);
   });
 
-  test('returns numeric zeroes after closing a 12-item session without observations', async () => {
+  test('returns numeric zeroes and blocks closing a 12-item session without observations', async () => {
     const inventoryImportId = database
       .prepare("SELECT id FROM inventory_imports WHERE import_code = 'synthetic-import'")
       .get().id;
@@ -289,12 +289,12 @@ describe('inventory API', () => {
       .post('/api/sessions')
       .send({ locationId })
       .expect(201);
-    const closed = await request(app)
+    const blocked = await request(app)
       .post(`/api/sessions/${created.body.session.id}/close`)
-      .expect(200);
+      .expect(409);
 
-    expect(closed.body.summary).toMatchObject({
-      status: 'closed',
+    expect(blocked.body.summary).toMatchObject({
+      status: 'open',
       totalAssets: 12,
       observations: 0,
       verifiedExpected: 0,
@@ -311,7 +311,64 @@ describe('inventory API', () => {
       'pending',
       'progressPercent',
     ]) {
-      expect(typeof closed.body.summary[field]).toBe('number');
+      expect(typeof blocked.body.summary[field]).toBe('number');
     }
+  });
+
+  test.each([
+    ['dato_distinto'],
+    ['no_ubicado'],
+    ['otra_ubicacion'],
+    ['desconocido'],
+  ])('rejects empty and whitespace notes for %s', async (status) => {
+    const created = await request(app).post('/api/sessions').send({ locationId }).expect(201);
+    const base = status === 'desconocido'
+      ? { provisionalCode: `SINTETICO-${status}`, status, locationId }
+      : { assetId, status, locationId };
+    await request(app).post(`/api/sessions/${created.body.session.id}/observations`)
+      .send({ ...base, observation: '' }).expect(400);
+    await request(app).post(`/api/sessions/${created.body.session.id}/observations`)
+      .send({ ...base, observation: '   ' }).expect(400);
+  });
+
+  test('accepts verified without notes', async () => {
+    const created = await request(app).post('/api/sessions').send({ locationId }).expect(201);
+    await request(app).post(`/api/sessions/${created.body.session.id}/observations`)
+      .send({ assetId, status: 'verificado', locationId, observation: '' }).expect(201);
+  });
+
+  test.each([
+    ['dato_distinto', 'datosDistintos'],
+    ['no_ubicado', 'noUbicados'],
+  ])('%s reviews an expected asset and reduces pending', async (status, metric) => {
+    const created = await request(app).post('/api/sessions').send({ locationId }).expect(201);
+    await request(app).post(`/api/sessions/${created.body.session.id}/observations`)
+      .send({ assetId, status, locationId, observation: 'Dato sintético obligatorio' }).expect(201);
+    const summary = await request(app).get(`/api/sessions/${created.body.session.id}/summary`).expect(200);
+    expect(summary.body.summary).toMatchObject({
+      bienesEsperadosRevisados: 1,
+      [metric]: 1,
+      pendientes: 0,
+      porcentajeRevision: 100,
+    });
+  });
+
+  test('returns all matches for a duplicated scanner code', async () => {
+    const importId = database.prepare("SELECT id FROM inventory_imports WHERE import_code = 'synthetic-import'").get().id;
+    database.prepare(`
+      INSERT INTO assets (asset_code, inventory_import_id, location_id, name, scanner_code)
+      VALUES ('SYN-BIEN-0002', ?, ?, 'Coincidencia sintética', 'SYN-SCAN-0001')
+    `).run(importId, otherLocationId);
+    const response = await request(app).get('/api/assets/by-code/SYN-SCAN-0001').expect(200);
+    expect(response.body).toMatchObject({ asset: null, ambiguous: true });
+    expect(response.body.matches).toHaveLength(2);
+  });
+
+  test('pending assets exclude assets already reviewed', async () => {
+    const created = await request(app).post('/api/sessions').send({ locationId }).expect(201);
+    await request(app).post(`/api/sessions/${created.body.session.id}/observations`)
+      .send({ assetId, status: 'dato_distinto', locationId, observation: 'Sintética' }).expect(201);
+    const pending = await request(app).get(`/api/sessions/${created.body.session.id}/pending-assets`).expect(200);
+    expect(pending.body.assets.map(({ id }) => id)).not.toContain(assetId);
   });
 });

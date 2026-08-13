@@ -1,0 +1,39 @@
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: #17251d;
+  background: #eef3f0;
+  --primary: #176b45;
+  --danger: #962d27;
+  --line: #c8d5cd;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+header { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding: 1rem; color: white; background: #0d4e31; }
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 0; font-size: 1.4rem; }
+.eyebrow { margin-bottom: .2rem; color: #b9e9d0; font-size: .7rem; font-weight: 800; text-transform: uppercase; }
+#network-state { padding: .3rem .55rem; border-radius: 999px; background: rgb(255 255 255 / 15%); font-size: .78rem; }
+main { width: min(100% - 1rem, 620px); margin: .75rem auto 2rem; }
+.card { margin-bottom: .75rem; padding: 1rem; border: 1px solid var(--line); border-radius: 12px; background: white; }
+.progress-copy, .input-row { display: flex; justify-content: space-between; align-items: center; gap: .6rem; }
+.progress-copy strong, .progress-copy span { display: block; }
+progress { width: 100%; height: .85rem; accent-color: var(--primary); }
+label { display: grid; gap: .35rem; margin-bottom: .75rem; font-weight: 700; }
+input, select, textarea, button { min-height: 48px; border-radius: 9px; font: inherit; }
+input, select, textarea { width: 100%; padding: .7rem; border: 1px solid #9fb2a7; }
+button { width: 100%; padding: .7rem 1rem; border: 0; background: var(--primary); color: white; font-weight: 800; }
+button.secondary { margin-top: .75rem; border: 1px solid var(--primary); background: white; color: var(--primary); }
+button.danger { margin-top: .5rem; background: var(--danger); }
+button:disabled { opacity: .5; }
+#camera-preview { width: 100%; margin-top: .75rem; border-radius: 10px; background: #111; }
+.hint { margin: .6rem 0 0; color: #596a61; font-size: .88rem; }
+.classification { display: inline-block; padding: .3rem .55rem; border-radius: 999px; background: #e7f4ec; color: #0d5937; font-weight: 800; }
+dl { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+dt { color: #66766d; font-size: .75rem; }
+dd { margin: .1rem 0 0; font-weight: 700; overflow-wrap: anywhere; }
+#message { min-height: 1.5rem; font-weight: 700; color: #0d5937; }
+#message.error { color: var(--danger); }
+.match-choices { display: grid; gap: .5rem; margin-bottom: .75rem; }
+.match-choices button { text-align: left; }
+[hidden] { display: none !important; }
+@media (max-width: 420px) { dl { grid-template-columns: 1fr; } }

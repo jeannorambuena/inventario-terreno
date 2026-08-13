@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#0d4e31">
+    <title>Inventario Terreno Móvil</title>
+    <link rel="stylesheet" href="/mobile.css">
+  </head>
+  <body>
+    <header>
+      <div>
+        <p class="eyebrow">Sesión móvil local</p>
+        <h1>Inventario Terreno</h1>
+      </div>
+      <span id="network-state">Conectando…</span>
+    </header>
+    <main>
+      <section class="card session-card">
+        <p id="session-location">Cargando ubicación…</p>
+        <div class="progress-copy">
+          <div>
+            <strong id="progress-label">0 de 0 bienes revisados</strong>
+            <span id="conformance-label">0 bienes conformes</span>
+          </div>
+          <span id="progress-percent">0%</span>
+        </div>
+        <progress id="progress" value="0" max="100">0%</progress>
+      </section>
+      <section class="card">
+        <form id="lookup-form">
+          <label for="code">Código del bien o escáner</label>
+          <div class="input-row">
+            <input id="code" inputmode="numeric" autocomplete="off" required>
+            <button type="submit">Buscar</button>
+          </div>
+        </form>
+        <button id="camera-button" type="button" class="secondary">Usar cámara</button>
+        <p id="camera-message" class="hint"></p>
+        <div id="camera-panel" hidden>
+          <video id="camera-preview" playsinline muted></video>
+          <button id="stop-camera" type="button" class="danger">Detener cámara</button>
+        </div>
+      </section>
+      <section id="result-card" class="card" hidden aria-live="polite">
+        <p id="classification" class="classification"></p>
+        <h2 id="asset-name"></h2>
+        <dl id="asset-details"></dl>
+        <div id="match-choices" class="match-choices"></div>
+        <form id="observation-form">
+          <label>Estado
+            <select id="status" required>
+              <option value="verificado">Verificado</option>
+              <option value="otra_ubicacion">Otra ubicación</option>
+              <option value="no_ubicado">No ubicado</option>
+              <option value="desconocido">Desconocido</option>
+              <option value="dato_distinto">Dato distinto</option>
+            </select>
+          </label>
+          <label>Observación
+            <textarea id="notes" rows="3" maxlength="2000"></textarea>
+          </label>
+          <button type="submit">Registrar</button>
+        </form>
+      </section>
+      <p id="message" role="status" aria-live="polite"></p>
+    </main>
+    <script src="/vendor/zxing-browser.min.js"></script>
+    <script type="module" src="/mobile.js"></script>
+  </body>
+</html>

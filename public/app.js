@@ -6,6 +6,11 @@ const elements = {
   startSession: document.querySelector('#start-session'),
   workPanel: document.querySelector('#work-panel'),
   closeSession: document.querySelector('#close-session'),
+  pairingPanel: document.querySelector('#pairing-panel'),
+  pairingQr: document.querySelector('#pairing-qr'),
+  mobileUrl: document.querySelector('#mobile-url'),
+  pairingExpiry: document.querySelector('#pairing-expiry'),
+  refreshPairing: document.querySelector('#refresh-pairing'),
   lookupForm: document.querySelector('#lookup-form'),
   lookupCode: document.querySelector('#lookup-code'),
   assetResult: document.querySelector('#asset-result'),
@@ -17,7 +22,10 @@ const elements = {
   observationNotes: document.querySelector('#observation-notes'),
   progress: document.querySelector('#progress'),
   progressLabel: document.querySelector('#progress-label'),
+  conformanceLabel: document.querySelector('#conformance-label'),
   progressPercent: document.querySelector('#progress-percent'),
+  pendingCount: document.querySelector('#pending-count'),
+  pendingAssets: document.querySelector('#pending-assets'),
   summaryPanel: document.querySelector('#summary-panel'),
   summaryDetails: document.querySelector('#summary-details'),
   message: document.querySelector('#message'),
@@ -76,11 +84,38 @@ function numericMetric(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function observationRequired(status) {
+  return status !== 'verificado';
+}
+
+elements.observationStatus.addEventListener('change', () => {
+  elements.observationNotes.required = observationRequired(elements.observationStatus.value);
+});
+
 async function loadLocations() {
   const { locations } = await api('/api/locations');
   state.locations = locations;
   setOptions(elements.direction, distinct(locations.map(({ direction }) => direction)));
 }
+
+async function createPairing() {
+  if (!state.sessionId) return;
+  const { pairing } = await api(`/api/sessions/${state.sessionId}/pair`, { method: 'POST' });
+  elements.mobileUrl.href = pairing.mobileUrl;
+  elements.mobileUrl.textContent = pairing.mobileUrl;
+  elements.pairingQr.src = pairing.qrDataUrl;
+  elements.pairingExpiry.textContent = `Válido hasta ${new Date(pairing.expiresAt).toLocaleString('es-CL')}`;
+  elements.pairingPanel.hidden = false;
+}
+
+elements.refreshPairing.addEventListener('click', async () => {
+  try {
+    await createPairing();
+    setMessage('Enlace móvil renovado. El enlace anterior dejó de ser válido.');
+  } catch (error) {
+    setMessage(error.message, true);
+  }
+});
 
 elements.direction.addEventListener('change', () => {
   const selectedDirection = selectedValue(elements.direction);
@@ -127,6 +162,7 @@ elements.startSession.addEventListener('click', async () => {
     elements.summaryPanel.hidden = true;
     elements.startSession.disabled = true;
     await updateProgress();
+    await createPairing();
     elements.lookupCode.focus();
     setMessage('Sesión iniciada.');
   } catch (error) {
@@ -165,8 +201,25 @@ function showAsset(asset, provisionalCode) {
     elements.observationStatus.disabled = true;
     elements.observationNotes.required = true;
   }
+  elements.observationNotes.required = observationRequired(elements.observationStatus.value);
   elements.assetResult.hidden = false;
   elements.observationForm.hidden = false;
+}
+
+function showLookupChoice(lookup) {
+  elements.assetResult.hidden = false;
+  elements.observationForm.hidden = true;
+  elements.assetResultLabel.textContent = 'Múltiples coincidencias';
+  elements.assetName.textContent = 'Seleccione el bien correcto';
+  elements.assetDetails.replaceChildren();
+  for (const asset of lookup.matches) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary';
+    button.textContent = `${asset.assetCode} — ${asset.name}`;
+    button.addEventListener('click', () => showAsset(asset, null));
+    elements.assetDetails.append(button);
+  }
 }
 
 elements.lookupForm.addEventListener('submit', async (event) => {
@@ -174,7 +227,18 @@ elements.lookupForm.addEventListener('submit', async (event) => {
   const code = elements.lookupCode.value.trim();
   if (!code) return;
   try {
-    const { asset } = await api(`/api/assets/by-code/${encodeURIComponent(code)}`);
+    const { asset, lookup } = await api(`/api/assets/by-code/${encodeURIComponent(code)}?sessionId=${state.sessionId}`);
+    if (lookup?.alreadyObserved) {
+      elements.assetResult.hidden = true;
+      elements.observationForm.hidden = true;
+      setMessage('Este bien ya fue observado en la sesión.', true);
+      return;
+    }
+    if (lookup?.ambiguous) {
+      showLookupChoice(lookup);
+      setMessage('Seleccione una de las coincidencias antes de registrar.');
+      return;
+    }
     showAsset(asset, null);
     setMessage('Bien encontrado.');
   } catch (error) {
@@ -220,28 +284,66 @@ elements.observationForm.addEventListener('submit', async (event) => {
 async function updateProgress() {
   const { summary } = await api(`/api/sessions/${state.sessionId}/summary`);
   const progressPercent = numericMetric(summary.progressPercent);
-  const verifiedExpected = numericMetric(summary.verifiedExpected);
-  const totalAssets = numericMetric(summary.totalAssets);
+  const reviewed = numericMetric(summary.bienesEsperadosRevisados);
+  const conforming = numericMetric(summary.bienesConformes);
+  const totalAssets = numericMetric(summary.bienesEsperados);
   elements.progress.value = progressPercent;
   elements.progress.textContent = `${progressPercent}%`;
-  elements.progressLabel.textContent = `${verifiedExpected} de ${totalAssets} verificados`;
+  elements.progressLabel.textContent = `${reviewed} de ${totalAssets} bienes revisados`;
+  elements.conformanceLabel.textContent = `${conforming} bienes conformes`;
   elements.progressPercent.textContent = `${progressPercent}%`;
+  await loadPendingAssets();
   return summary;
+}
+
+function choosePendingAsset(asset, status) {
+  showAsset(asset, null);
+  elements.observationStatus.value = status;
+  elements.observationNotes.required = observationRequired(status);
+  elements.observationNotes.focus();
+}
+
+async function loadPendingAssets() {
+  const { assets } = await api(`/api/sessions/${state.sessionId}/pending-assets`);
+  elements.pendingCount.textContent = String(assets.length);
+  elements.pendingAssets.replaceChildren();
+  for (const asset of assets) {
+    const item = document.createElement('article');
+    item.className = 'pending-item';
+    const description = document.createElement('p');
+    description.textContent = `${asset.assetCode} | ${asset.scannerCode || '—'} | ${asset.name} | ${asset.brand || '—'} | ${asset.serialNumber || '—'} | ${asset.model || '—'}`;
+    const actions = document.createElement('div');
+    actions.className = 'pending-actions';
+    for (const [label, status] of [['Verificado', 'verificado'], ['No ubicado', 'no_ubicado'], ['Dato distinto', 'dato_distinto']]) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      button.addEventListener('click', () => choosePendingAsset(asset, status));
+      actions.append(button);
+    }
+    item.append(description, actions);
+    elements.pendingAssets.append(item);
+  }
 }
 
 elements.closeSession.addEventListener('click', async () => {
   try {
     const { summary } = await api(`/api/sessions/${state.sessionId}/close`, { method: 'POST' });
     elements.summaryDetails.replaceChildren();
-    appendDetail(elements.summaryDetails, 'Bienes esperados', String(numericMetric(summary.totalAssets)));
-    appendDetail(elements.summaryDetails, 'Observaciones', String(numericMetric(summary.observations)));
-    appendDetail(elements.summaryDetails, 'Bienes esperados verificados', String(numericMetric(summary.verifiedExpected)));
-    appendDetail(elements.summaryDetails, 'Diferencias de ubicación', String(numericMetric(summary.locationDifferences)));
-    appendDetail(elements.summaryDetails, 'Hallazgos provisionales', String(numericMetric(summary.provisionalFindings)));
-    appendDetail(elements.summaryDetails, 'Pendientes', String(numericMetric(summary.pending)));
-    appendDetail(elements.summaryDetails, 'Avance', `${numericMetric(summary.progressPercent)}%`);
+    appendDetail(elements.summaryDetails, 'Bienes esperados', String(numericMetric(summary.bienesEsperados)));
+    appendDetail(elements.summaryDetails, 'Bienes revisados', String(numericMetric(summary.bienesEsperadosRevisados)));
+    appendDetail(elements.summaryDetails, 'Bienes conformes', String(numericMetric(summary.bienesConformes)));
+    appendDetail(elements.summaryDetails, 'Datos distintos', String(numericMetric(summary.datosDistintos)));
+    appendDetail(elements.summaryDetails, 'No ubicados', String(numericMetric(summary.noUbicados)));
+    appendDetail(elements.summaryDetails, 'Diferencias de ubicación', String(numericMetric(summary.diferenciasUbicacion)));
+    appendDetail(elements.summaryDetails, 'Hallazgos provisionales', String(numericMetric(summary.hallazgosProvisionales)));
+    appendDetail(elements.summaryDetails, 'Observaciones totales', String(numericMetric(summary.observacionesTotales)));
+    appendDetail(elements.summaryDetails, 'Pendientes', String(numericMetric(summary.pendientes)));
+    appendDetail(elements.summaryDetails, 'Porcentaje de revisión', `${numericMetric(summary.porcentajeRevision)}%`);
+    appendDetail(elements.summaryDetails, 'Porcentaje de conformidad', `${numericMetric(summary.porcentajeConformidad)}%`);
     elements.summaryPanel.hidden = false;
     elements.workPanel.hidden = true;
+    elements.pairingPanel.hidden = true;
     state.sessionId = null;
     elements.startSession.disabled = false;
     setMessage('Sesión cerrada.');

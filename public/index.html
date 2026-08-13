@@ -46,9 +46,23 @@
           <button id="close-session" type="button" class="secondary">Cerrar sesión</button>
         </div>
 
+        <aside id="pairing-panel" class="pairing-panel" hidden>
+          <div>
+            <p class="eyebrow">Conexión Samsung</p>
+            <h3>Escanee para abrir esta sesión</h3>
+            <a id="mobile-url" href="#" target="_blank" rel="noreferrer"></a>
+            <p id="pairing-expiry" class="muted"></p>
+            <button id="refresh-pairing" type="button" class="secondary">Renovar enlace</button>
+          </div>
+          <img id="pairing-qr" alt="Código QR para abrir la sesión en el teléfono">
+        </aside>
+
         <div class="progress-block" aria-live="polite">
           <div class="progress-copy">
-            <strong id="progress-label">0 de 0 revisados</strong>
+            <div>
+              <strong id="progress-label">0 de 0 bienes revisados</strong>
+              <span id="conformance-label" class="muted">0 bienes conformes</span>
+            </div>
             <span id="progress-percent">0%</span>
           </div>
           <progress id="progress" value="0" max="100">0%</progress>
@@ -61,6 +75,11 @@
             <button type="submit">Buscar</button>
           </div>
         </form>
+
+        <details id="pending-panel" class="pending-panel">
+          <summary>Bienes pendientes de revisión (<span id="pending-count">0</span>)</summary>
+          <div id="pending-assets" class="pending-assets"></div>
+        </details>
 
         <article id="asset-result" class="asset-card" hidden aria-live="polite">
           <p class="eyebrow" id="asset-result-label">Resultado</p>

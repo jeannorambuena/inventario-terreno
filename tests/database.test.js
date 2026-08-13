@@ -41,6 +41,7 @@ describe('database initialization', () => {
         'inventory_sessions',
         'locations',
         'observations',
+        'session_pairings',
       ]);
     } finally {
       database.close();

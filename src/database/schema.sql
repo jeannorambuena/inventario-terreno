@@ -70,6 +70,16 @@ CREATE TABLE IF NOT EXISTS observations (
   FOREIGN KEY (selected_location_id) REFERENCES locations(id)
 );
 
+CREATE TABLE IF NOT EXISTS session_pairings (
+  id INTEGER PRIMARY KEY,
+  inventory_session_id INTEGER NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TEXT NOT NULL,
+  revoked_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (inventory_session_id) REFERENCES inventory_sessions(id)
+);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id INTEGER PRIMARY KEY,
   entity_type TEXT NOT NULL,
@@ -87,6 +97,9 @@ CREATE INDEX IF NOT EXISTS idx_observations_session_id
 
 CREATE INDEX IF NOT EXISTS idx_observations_asset_id
   ON observations(asset_id);
+
+CREATE INDEX IF NOT EXISTS idx_session_pairings_session_id
+  ON session_pairings(inventory_session_id);
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_entity
   ON audit_log(entity_type, entity_code);

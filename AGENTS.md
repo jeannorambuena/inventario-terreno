@@ -1,43 +1,87 @@
 # Reglas del proyecto Inventario Terreno
 
-Estas instrucciones se aplican a todo el repositorio.
+Estas instrucciones se aplican a todo el repositorio y deben leerse antes de operar un clon nuevo.
 
-## Alcance y tecnología
+## Propósito y arquitectura
 
-- Construir una aplicación local y offline para Windows.
-- Usar únicamente HTML, CSS y JavaScript con Node.js 24, módulos ES, Express, SQLite y ExcelJS.
-- Mantener el MVP sin Docker, PHP, Java ni APIs de inteligencia artificial.
-- No agregar servicios en la nube, telemetría ni dependencias de red en tiempo de ejecución.
-- Cuando exista un servidor local, limitarlo por defecto a `127.0.0.1`.
+Inventario Terreno es una aplicación local y offline para Windows. Un notebook ejecuta Node.js/Express y guarda la copia de trabajo en SQLite; la interfaz web del notebook y un teléfono conectado a la misma red privada consumen la API local. ExcelJS lee `imports/ACTIVOS.xlsx` como fuente protegida de solo lectura.
+
+- `src/`: servidor Express, API, base SQLite, importación y utilidades de red.
+- `public/`: interfaz del notebook y vista móvil, sin datos reales incorporados.
+- `tests/`: pruebas Vitest/Supertest con datos completamente sintéticos.
+- `docs/`: instalación, traspaso, operación y decisiones del proyecto.
+- `scripts/`: instalación, verificación y arranque seguros para PowerShell.
+- `imports/`: planillas privadas locales; nunca se versionan.
+- `data/`: SQLite privada local; nunca se versiona ni se sobrescribe.
+- `backups/`: respaldos privados locales; nunca se versionan.
+
+La tecnología aprobada es HTML, CSS, JavaScript ES Modules, Node.js 24, Express, SQLite y ExcelJS. El MVP no usa Docker, PHP, Java, servicios en la nube, telemetría ni APIs de inteligencia artificial.
+
+## Requisitos del equipo
+
+- Git.
+- GitHub CLI (`gh`) autenticado cuando se necesite clonar o publicar.
+- Node.js 24.x y npm incluido.
+- Windows PowerShell 5.1 o PowerShell 7.
+- En PowerShell usar `npm.cmd` y `npx.cmd`, especialmente si la política bloquea `npm.ps1` o `npx.ps1`.
+
+No reinstalar herramientas que ya cumplen la versión requerida. Si falta una herramienta, informar el bloqueo y solicitar su instalación; no descargar ejecutables de fuentes improvisadas.
+
+## Instalación y operación
+
+Desde la raíz del repositorio:
+
+```powershell
+# El modo debe elegirse expresamente; sin modo el script se detiene.
+.\scripts\setup.ps1 -Mode NUEVO
+.\scripts\setup.ps1 -Mode RESTAURAR
+
+# Verificación integral.
+.\scripts\verify.ps1
+
+# Dependencias reproducibles y pruebas (también ejecutadas por setup).
+npm.cmd ci
+npm.cmd test
+npm.cmd run test:mobile
+
+# Respaldo consistente de la base actual.
+npm.cmd run backup
+
+# Servidor activo en primer plano.
+.\scripts\start.ps1
+```
+
+`start.ps1` no importa datos. Debe comprobar que el puerto `3180` esté libre, iniciar el servicio en `0.0.0.0:3180`, mostrar `http://localhost:3180` y las URLs de la LAN, y dejar el proceso activo.
+
+Antes de iniciar operación real, ejecutar las pruebas generales y móviles. Después verificar HTTP `200` tanto en localhost como en una IPv4 privada del notebook. No configurar redirección de puertos ni exponer el servicio a Internet.
 
 ## Protección de datos
 
-- Tratar `ACTIVOS.xlsx` como fuente original de solo lectura: nunca modificarlo, sobrescribirlo, renombrarlo ni usarlo como archivo de salida.
-- No versionar archivos XLSX, XLS, CSV, SQLite, bases de datos, fotografías, exportaciones, respaldos, certificados, claves, archivos `.env` ni datos municipales.
-- Mantener datos reales fuera del repositorio y de sus fixtures, capturas, logs y documentación.
-- Usar en pruebas únicamente datos completamente sintéticos, sin copiar ni transformar registros municipales reales.
-- Guardar códigos, identificadores, folios y valores equivalentes como texto en cada capa. En SQLite deben usar afinidad `TEXT`; al leer Excel deben convertirse de forma explícita a texto sin perder ceros iniciales.
-- No aplicar conversiones numéricas, notación científica, redondeo ni normalización destructiva a códigos.
+- Tratar `imports/ACTIVOS.xlsx` como fuente original de solo lectura: nunca modificarla, sobrescribirla, renombrarla ni usarla como salida.
+- Nunca publicar XLS/XLSX, CSV, SQLite, bases de datos, fotografías, exportaciones, respaldos, certificados, claves, `.env`, tokens ni datos municipales.
+- No importar ni restaurar datos sin autorización explícita del usuario y una elección expresa de modo.
+- Nunca sobrescribir `data/inventario.sqlite`. Si ya existe y se intenta importar o restaurar otra base, detenerse e informar el conflicto.
+- No borrar ni reiniciar sesiones u observaciones existentes. Las sesiones cerradas son evidencia histórica.
+- Mantener datos reales fuera de fixtures, capturas, logs, documentación y mensajes de prueba.
+- Usar en pruebas solo datos sintéticos que no deriven de registros reales.
+- Guardar códigos, identificadores y folios como `TEXT` en todas las capas y preservar ceros iniciales.
+- No imprimir tokens móviles, secretos o datos administrativos en consola.
 
-## Organización técnica futura
+Los directorios `imports/`, `data/` y `backups/` son privados incluso cuando existen solo en el equipo de operación. Confirmar siempre su exclusión con `git check-ignore`.
 
-- `src/`: código del servidor, acceso a datos y lógica de dominio, separado por responsabilidades.
-- `public/`: interfaz web estática local (HTML, CSS, JavaScript y recursos no sensibles).
-- `tests/`: pruebas automatizadas y fixtures exclusivamente sintéticos.
-- `docs/`: decisiones, alcance y planificación del proyecto.
-- Mantener la lógica de lectura de Excel separada de la persistencia SQLite y de las rutas HTTP.
-- Validar entradas, rutas de archivos y nombres de exportación; no construir SQL mediante concatenación de datos externos.
-
-## JavaScript y herramientas
+## Reglas técnicas
 
 - Usar JavaScript ES Modules (`import`/`export`), no CommonJS.
 - Mantener compatibilidad con Node.js 24.
-- No instalar una dependencia sin justificar su necesidad dentro de la tecnología aprobada.
-- En Windows, usar `npm.cmd` y `npx.cmd` cuando PowerShell bloquee los wrappers `npm.ps1` o `npx.ps1`.
-- No incluir secretos en comandos, código, logs ni mensajes de error.
+- Mantener separadas la lectura Excel, persistencia SQLite, API y presentación.
+- Validar entradas, rutas y nombres de archivo. No construir SQL concatenando datos externos.
+- El servidor operativo debe escuchar en `0.0.0.0:3180`, pero aceptar clientes solo de localhost o redes IPv4 privadas.
+- No instalar dependencias nuevas sin justificar su necesidad dentro de la tecnología aprobada.
 
-## Verificación
+## Verificación y bloqueos
 
-- Antes de terminar un cambio, revisar `git status --short` y confirmar que no aparezcan datos o artefactos sensibles.
-- Las pruebas futuras deben comprobar de forma explícita la conservación de ceros iniciales y el carácter de solo lectura de `ACTIVOS.xlsx`.
-- No hacer commits, publicar ramas ni crear repositorios remotos salvo solicitud explícita del usuario.
+- Ejecutar `npm.cmd test`, `npm.cmd run test:mobile` y `git diff --check` antes de entregar cambios.
+- Revisar `git status --short` y confirmar que no aparezcan artefactos sensibles.
+- Verificar `http://localhost:3180` y al menos una URL LAN cuando el servidor esté activo.
+- No hacer commits, push, PR ni crear remotos salvo solicitud explícita.
+- Si falta una herramienta, el puerto está ocupado, hay conflicto de datos, no existe autorización o una prueba falla, detenerse, explicar el bloqueo con evidencia y no improvisar usando datos reales.
