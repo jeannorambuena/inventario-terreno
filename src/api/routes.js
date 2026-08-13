@@ -98,12 +98,12 @@ function getSessionSummary(database, sessionId) {
     .get(session.locationId);
   const metrics = database.prepare(`
     SELECT
-      COUNT(o.id) AS observationCount,
-      COUNT(DISTINCT CASE
+      COALESCE(COUNT(o.id), 0) AS observations,
+      COALESCE(COUNT(DISTINCT CASE
         WHEN o.status_code = 'verificado' AND a.location_id = ? THEN o.asset_id
-      END) AS verifiedExpected,
-      SUM(CASE WHEN o.status_code = 'otra_ubicacion' THEN 1 ELSE 0 END) AS locationDifferences,
-      SUM(CASE WHEN o.asset_id IS NULL THEN 1 ELSE 0 END) AS provisionalFindings
+      END), 0) AS verifiedExpected,
+      COALESCE(SUM(CASE WHEN o.status_code = 'otra_ubicacion' THEN 1 ELSE 0 END), 0) AS locationDifferences,
+      COALESCE(SUM(CASE WHEN o.asset_id IS NULL THEN 1 ELSE 0 END), 0) AS provisionalFindings
     FROM observations o
     LEFT JOIN assets a ON a.id = o.asset_id
     WHERE o.inventory_session_id = ?
@@ -121,7 +121,8 @@ function getSessionSummary(database, sessionId) {
   return {
     ...session,
     totalAssets: total,
-    observationCount: metrics.observationCount,
+    observations: metrics.observations,
+    observationCount: metrics.observations,
     verifiedExpected: metrics.verifiedExpected,
     locationDifferences: metrics.locationDifferences,
     provisionalFindings: metrics.provisionalFindings,

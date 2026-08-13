@@ -71,6 +71,11 @@ function appendDetail(container, label, value) {
   container.append(wrapper);
 }
 
+function numericMetric(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
 async function loadLocations() {
   const { locations } = await api('/api/locations');
   state.locations = locations;
@@ -214,10 +219,13 @@ elements.observationForm.addEventListener('submit', async (event) => {
 
 async function updateProgress() {
   const { summary } = await api(`/api/sessions/${state.sessionId}/summary`);
-  elements.progress.value = summary.progressPercent;
-  elements.progress.textContent = `${summary.progressPercent}%`;
-  elements.progressLabel.textContent = `${summary.verifiedExpected} de ${summary.totalAssets} verificados`;
-  elements.progressPercent.textContent = `${summary.progressPercent}%`;
+  const progressPercent = numericMetric(summary.progressPercent);
+  const verifiedExpected = numericMetric(summary.verifiedExpected);
+  const totalAssets = numericMetric(summary.totalAssets);
+  elements.progress.value = progressPercent;
+  elements.progress.textContent = `${progressPercent}%`;
+  elements.progressLabel.textContent = `${verifiedExpected} de ${totalAssets} verificados`;
+  elements.progressPercent.textContent = `${progressPercent}%`;
   return summary;
 }
 
@@ -225,13 +233,13 @@ elements.closeSession.addEventListener('click', async () => {
   try {
     const { summary } = await api(`/api/sessions/${state.sessionId}/close`, { method: 'POST' });
     elements.summaryDetails.replaceChildren();
-    appendDetail(elements.summaryDetails, 'Bienes esperados', String(summary.totalAssets));
-    appendDetail(elements.summaryDetails, 'Observaciones', String(summary.observationCount));
-    appendDetail(elements.summaryDetails, 'Bienes esperados verificados', String(summary.verifiedExpected));
-    appendDetail(elements.summaryDetails, 'Diferencias de ubicación', String(summary.locationDifferences));
-    appendDetail(elements.summaryDetails, 'Hallazgos provisionales', String(summary.provisionalFindings));
-    appendDetail(elements.summaryDetails, 'Pendientes', String(summary.pending));
-    appendDetail(elements.summaryDetails, 'Avance', `${summary.progressPercent}%`);
+    appendDetail(elements.summaryDetails, 'Bienes esperados', String(numericMetric(summary.totalAssets)));
+    appendDetail(elements.summaryDetails, 'Observaciones', String(numericMetric(summary.observations)));
+    appendDetail(elements.summaryDetails, 'Bienes esperados verificados', String(numericMetric(summary.verifiedExpected)));
+    appendDetail(elements.summaryDetails, 'Diferencias de ubicación', String(numericMetric(summary.locationDifferences)));
+    appendDetail(elements.summaryDetails, 'Hallazgos provisionales', String(numericMetric(summary.provisionalFindings)));
+    appendDetail(elements.summaryDetails, 'Pendientes', String(numericMetric(summary.pending)));
+    appendDetail(elements.summaryDetails, 'Avance', `${numericMetric(summary.progressPercent)}%`);
     elements.summaryPanel.hidden = false;
     elements.workPanel.hidden = true;
     state.sessionId = null;

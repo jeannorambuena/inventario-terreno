@@ -82,6 +82,7 @@ describe('inventory API', () => {
     const summary = await request(app).get(`/api/sessions/${sessionId}/summary`).expect(200);
     expect(summary.body.summary).toMatchObject({
       totalAssets: 1,
+      observations: 1,
       observationCount: 1,
       verifiedExpected: 1,
       locationDifferences: 0,
@@ -143,6 +144,7 @@ describe('inventory API', () => {
       .get(`/api/sessions/${created.body.session.id}/summary`)
       .expect(200);
     expect(summary.body.summary).toMatchObject({
+      observations: 1,
       observationCount: 1,
       verifiedExpected: 0,
       provisionalFindings: 1,
@@ -236,6 +238,7 @@ describe('inventory API', () => {
 
     const expectedMetrics = {
       totalAssets: 12,
+      observations: 2,
       observationCount: 2,
       verifiedExpected: 1,
       locationDifferences: 1,
@@ -260,5 +263,55 @@ describe('inventory API', () => {
       WHERE inventory_session_id = ?
     `).get(sessionId);
     expect(persistedLinks.count).toBe(2);
+  });
+
+  test('returns numeric zeroes after closing a 12-item session without observations', async () => {
+    const inventoryImportId = database
+      .prepare("SELECT id FROM inventory_imports WHERE import_code = 'synthetic-import'")
+      .get().id;
+    const insertAsset = database.prepare(`
+      INSERT INTO assets (
+        asset_code, inventory_import_id, location_id, name, scanner_code
+      ) VALUES (?, ?, ?, ?, ?)
+    `);
+    for (let index = 2; index <= 12; index += 1) {
+      const suffix = String(index).padStart(9, '0');
+      insertAsset.run(
+        `5${suffix}`,
+        inventoryImportId,
+        locationId,
+        `Bien sintético sin observación ${index}`,
+        `6${suffix}`,
+      );
+    }
+
+    const created = await request(app)
+      .post('/api/sessions')
+      .send({ locationId })
+      .expect(201);
+    const closed = await request(app)
+      .post(`/api/sessions/${created.body.session.id}/close`)
+      .expect(200);
+
+    expect(closed.body.summary).toMatchObject({
+      status: 'closed',
+      totalAssets: 12,
+      observations: 0,
+      verifiedExpected: 0,
+      locationDifferences: 0,
+      provisionalFindings: 0,
+      pending: 12,
+      progressPercent: 0,
+    });
+    for (const field of [
+      'observations',
+      'verifiedExpected',
+      'locationDifferences',
+      'provisionalFindings',
+      'pending',
+      'progressPercent',
+    ]) {
+      expect(typeof closed.body.summary[field]).toBe('number');
+    }
   });
 });
