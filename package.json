@@ -5,6 +5,7 @@
   "description": "Aplicación local y offline de inventario en terreno para Windows.",
   "type": "module",
   "scripts": {
+    "import": "node src/importer/run-import.js",
     "start": "node src/server.js",
     "test": "vitest run",
     "test:watch": "vitest"

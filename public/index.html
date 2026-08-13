@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Inventario Terreno</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Aplicación local</p>
+        <h1>Inventario Terreno</h1>
+      </div>
+      <span id="connection-status" class="status-pill">Verificando servicio…</span>
+    </header>
+
+    <main>
+      <section class="panel" aria-labelledby="location-title">
+        <div class="section-heading">
+          <div>
+            <p class="step">Paso 1</p>
+            <h2 id="location-title">Seleccionar ubicación</h2>
+          </div>
+          <button id="start-session" type="button" disabled>Iniciar sesión</button>
+        </div>
+        <div class="location-grid">
+          <label>Dirección
+            <select id="direction"><option value="">Seleccione…</option></select>
+          </label>
+          <label>Departamento
+            <select id="department" disabled><option value="">Seleccione…</option></select>
+          </label>
+          <label>Sección
+            <select id="section" disabled><option value="">Seleccione…</option></select>
+          </label>
+        </div>
+      </section>
+
+      <section id="work-panel" class="panel" aria-labelledby="work-title" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="step">Paso 2</p>
+            <h2 id="work-title">Registrar inventario</h2>
+          </div>
+          <button id="close-session" type="button" class="secondary">Cerrar sesión</button>
+        </div>
+
+        <div class="progress-block" aria-live="polite">
+          <div class="progress-copy">
+            <strong id="progress-label">0 de 0 revisados</strong>
+            <span id="progress-percent">0%</span>
+          </div>
+          <progress id="progress" value="0" max="100">0%</progress>
+        </div>
+
+        <form id="lookup-form" class="lookup-form">
+          <label for="lookup-code">Código del bien o escáner</label>
+          <div class="input-action">
+            <input id="lookup-code" name="code" type="text" inputmode="numeric" autocomplete="off" required>
+            <button type="submit">Buscar</button>
+          </div>
+        </form>
+
+        <article id="asset-result" class="asset-card" hidden aria-live="polite">
+          <p class="eyebrow" id="asset-result-label">Resultado</p>
+          <h3 id="asset-name"></h3>
+          <dl id="asset-details"></dl>
+        </article>
+
+        <form id="observation-form" class="observation-form" hidden>
+          <label>Estado
+            <select id="observation-status" required>
+              <option value="verificado">Verificado</option>
+              <option value="otra_ubicacion">Otra ubicación</option>
+              <option value="no_ubicado">No ubicado</option>
+              <option value="desconocido">Desconocido</option>
+              <option value="dato_distinto">Dato distinto</option>
+            </select>
+          </label>
+          <label>Observación
+            <textarea id="observation-notes" maxlength="2000" rows="3"></textarea>
+          </label>
+          <button type="submit">Registrar observación</button>
+        </form>
+      </section>
+
+      <section id="summary-panel" class="panel" hidden aria-labelledby="summary-title">
+        <p class="step">Sesión finalizada</p>
+        <h2 id="summary-title">Resumen</h2>
+        <dl id="summary-details" class="summary-grid"></dl>
+      </section>
+
+      <p id="message" class="message" role="status" aria-live="polite"></p>
+    </main>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -6,6 +6,8 @@ import ExcelJS from 'exceljs';
 import { afterEach, describe, expect, test } from 'vitest';
 
 import { importExcel } from '../src/importer/excel-importer.js';
+import { importAssetsFromExcel } from '../src/importer/import-assets.js';
+import { openDatabase } from '../src/database/connection.js';
 
 const temporaryDirectories = [];
 
@@ -125,5 +127,59 @@ describe('Excel importer', () => {
       expect.objectContaining({ code: 'CODE_COLUMN_NOT_FOUND' }),
     ]);
     expect(result.rowCount).toBe(1);
+  });
+
+  test('ignores empty styled headers after the last header with content', async () => {
+    const filePath = await writeSyntheticWorkbook((workbook) => {
+      const worksheet = workbook.addWorksheet('Inventario');
+      worksheet.addRow(['Código del bien', 'Bien']);
+      worksheet.addRow(['0000000001', 'Elemento sintético']);
+      worksheet.getRow(1).getCell(25).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFFFFFFF' },
+      };
+    });
+
+    const result = await importExcel(filePath);
+
+    expect(result.headers).toHaveLength(2);
+    expect(result.warnings).toEqual([]);
+  });
+
+  test('stores a protected synthetic import in SQLite as text', async () => {
+    const filePath = await writeSyntheticWorkbook((workbook) => {
+      const worksheet = workbook.addWorksheet('BD_SQL');
+      worksheet.addRow([
+        'CODIGO_BIEN', 'BIEN', 'MARCA', 'SERIE', 'MODELO', 'COLOR',
+        'DIRECCION', 'DEPARTAMENTO', 'SECCION', 'FINBAJA', 'CODIGO ESCANER',
+      ]);
+      worksheet.addRow([
+        '0010600073', 'Elemento sintético', 'Marca sintética', 'SERIE-01',
+        'Modelo sintético', 'Verde', 'Dirección sintética',
+        'Departamento sintético', 'Sección sintética', '0', '0000000123',
+      ]);
+    });
+    const database = openDatabase(':memory:');
+
+    try {
+      const result = await importAssetsFromExcel({ database, filePath, sheetName: 'BD_SQL' });
+      const stored = database.prepare(`
+        SELECT asset_code AS assetCode, scanner_code AS scannerCode,
+          typeof(asset_code) AS assetType, typeof(scanner_code) AS scannerType
+        FROM assets
+      `).get();
+
+      expect(result).toMatchObject({ importedRows: 1, sourceRowCount: 1 });
+      expect(result.sourceChecksum).toMatch(/^[a-f0-9]{64}$/);
+      expect(stored).toEqual({
+        assetCode: '0010600073',
+        scannerCode: '0000000123',
+        assetType: 'text',
+        scannerType: 'text',
+      });
+    } finally {
+      database.close();
+    }
   });
 });

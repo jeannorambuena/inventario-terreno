@@ -71,8 +71,13 @@ function cellToText(cell) {
 function readHeaders(worksheet, result) {
   const headerRow = worksheet.getRow(1);
   const usedNames = new Map();
+  let lastHeaderColumn = headerRow.cellCount;
 
-  for (let columnNumber = 1; columnNumber <= headerRow.cellCount; columnNumber += 1) {
+  while (lastHeaderColumn > 0 && cellToText(headerRow.getCell(lastHeaderColumn)) === '') {
+    lastHeaderColumn -= 1;
+  }
+
+  for (let columnNumber = 1; columnNumber <= lastHeaderColumn; columnNumber += 1) {
     const original = cellToText(headerRow.getCell(columnNumber));
     const baseName = normalizeHeader(original) || `column_${columnNumber}`;
     const occurrences = (usedNames.get(baseName) ?? 0) + 1;
