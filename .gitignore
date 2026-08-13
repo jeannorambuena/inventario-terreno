@@ -1,0 +1,101 @@
+# Dependencias y artefactos de Node.js
+node_modules/
+coverage/
+.nyc_output/
+dist/
+build/
+.cache/
+.parcel-cache/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Variables de entorno, configuración local y secretos
+.env
+.env.*
+*.env
+*.env.*
+.npmrc
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+
+# Planillas y datos tabulares (incluye variantes de mayúsculas)
+*.[xX][lL][sS]
+*.[xX][lL][sS][xX]
+*.[xX][lL][sS][mM]
+*.[xX][lL][sS][bB]
+*.[xX][lL][tT][xX]
+*.[cC][sS][vV]
+
+# SQLite y otras bases de datos
+*.[sS][qQ][lL][iI][tT][eE]
+*.[sS][qQ][lL][iI][tT][eE]3
+*.[dD][bB]
+*.[dD][bB]3
+*.[sS][dD][bB]
+*.sqlite-*
+*.db-*
+
+# Fotografías e imágenes de terreno
+*.[jJ][pP][gG]
+*.[jJ][pP][eE][gG]
+*.[pP][nN][gG]
+*.[gG][iI][fF]
+*.[bB][mM][pP]
+*.[tT][iI][fF]
+*.[tT][iI][fF][fF]
+*.[wW][eE][bB][pP]
+*.[hH][eE][iI][cC]
+*.[rR][aA][wW]
+
+# Recursos gráficos de la interfaz (solo dentro de public)
+!public/**/*.png
+!public/**/*.jpg
+!public/**/*.jpeg
+!public/**/*.webp
+
+# Datos locales, municipales, exportaciones y respaldos
+data/
+datos/
+datos-municipales/
+municipal-data/
+uploads/
+photos/
+evidence/
+fotografias/
+exports/
+exportaciones/
+imports/
+backups/
+respaldos/
+*.bak
+*.backup
+*.dump
+
+# Archivos temporales y del sistema operativo
+tmp/
+temp/
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editores e IDE (sin impedir configuración compartida explícita)
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
