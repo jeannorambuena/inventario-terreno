@@ -25,10 +25,33 @@ const observationSchema = z.object({
   locationId: z.number().int().positive(),
   observation: z.string().trim().max(2000).default(''),
   observedAt: z.iso.datetime().optional(),
-}).refine(
-  ({ assetId, provisionalCode }) => Boolean(assetId || provisionalCode),
-  { message: 'Debe indicar assetId o provisionalCode.' },
-);
+}).superRefine(({ assetId, provisionalCode, status, observation }, context) => {
+  const hasAsset = Boolean(assetId);
+  const hasProvisionalCode = Boolean(provisionalCode);
+
+  if (hasAsset === hasProvisionalCode) {
+    context.addIssue({
+      code: 'custom',
+      message: 'Debe indicar exclusivamente assetId o provisionalCode.',
+    });
+  }
+
+  if (hasProvisionalCode && status !== 'desconocido') {
+    context.addIssue({
+      code: 'custom',
+      path: ['status'],
+      message: 'Un hallazgo provisional debe registrarse como desconocido.',
+    });
+  }
+
+  if (hasProvisionalCode && !observation) {
+    context.addIssue({
+      code: 'custom',
+      path: ['observation'],
+      message: 'Un hallazgo provisional requiere una observación.',
+    });
+  }
+});
 
 function assetProjection() {
   return `
@@ -73,9 +96,18 @@ function getSessionSummary(database, sessionId) {
   const { total } = database
     .prepare('SELECT COUNT(*) AS total FROM assets WHERE location_id = ?')
     .get(session.locationId);
-  const { observed } = database
-    .prepare('SELECT COUNT(*) AS observed FROM observations WHERE inventory_session_id = ?')
-    .get(sessionId);
+  const metrics = database.prepare(`
+    SELECT
+      COUNT(o.id) AS observationCount,
+      COUNT(DISTINCT CASE
+        WHEN o.status_code = 'verificado' AND a.location_id = ? THEN o.asset_id
+      END) AS verifiedExpected,
+      SUM(CASE WHEN o.status_code = 'otra_ubicacion' THEN 1 ELSE 0 END) AS locationDifferences,
+      SUM(CASE WHEN o.asset_id IS NULL THEN 1 ELSE 0 END) AS provisionalFindings
+    FROM observations o
+    LEFT JOIN assets a ON a.id = o.asset_id
+    WHERE o.inventory_session_id = ?
+  `).get(session.locationId, sessionId);
   const statusCounts = Object.fromEntries(
     database.prepare(`
       SELECT status_code AS status, COUNT(*) AS count
@@ -89,9 +121,15 @@ function getSessionSummary(database, sessionId) {
   return {
     ...session,
     totalAssets: total,
-    observed,
-    pending: Math.max(total - observed, 0),
-    progressPercent: total === 0 ? 0 : Math.min(Math.round((observed / total) * 100), 100),
+    observationCount: metrics.observationCount,
+    verifiedExpected: metrics.verifiedExpected,
+    locationDifferences: metrics.locationDifferences,
+    provisionalFindings: metrics.provisionalFindings,
+    observed: metrics.verifiedExpected,
+    pending: Math.max(total - metrics.verifiedExpected, 0),
+    progressPercent: total === 0
+      ? 0
+      : Math.min(Math.round((metrics.verifiedExpected / total) * 100), 100),
     statusCounts,
   };
 }
@@ -166,15 +204,26 @@ export function createApiRouter(database) {
       return response.status(400).json({ error: 'Observación inválida.' });
     }
     const session = database
-      .prepare('SELECT status_code AS status FROM inventory_sessions WHERE id = ?')
+      .prepare('SELECT status_code AS status, location_id AS locationId FROM inventory_sessions WHERE id = ?')
       .get(sessionId.data);
     if (!session) return response.status(404).json({ error: 'Sesión no encontrada.' });
     if (session.status !== 'open') return response.status(409).json({ error: 'La sesión está cerrada.' });
-    if (parsed.data.assetId && !database.prepare('SELECT id FROM assets WHERE id = ?').get(parsed.data.assetId)) {
-      return response.status(404).json({ error: 'Bien no encontrado.' });
-    }
     if (!database.prepare('SELECT id FROM locations WHERE id = ?').get(parsed.data.locationId)) {
       return response.status(404).json({ error: 'Ubicación no encontrada.' });
+    }
+    if (parsed.data.locationId !== session.locationId) {
+      return response.status(409).json({ error: 'La ubicación seleccionada no corresponde a la sesión.' });
+    }
+    const asset = parsed.data.assetId
+      ? database.prepare('SELECT id, location_id AS locationId FROM assets WHERE id = ?').get(parsed.data.assetId)
+      : null;
+    if (parsed.data.assetId && !asset) {
+      return response.status(404).json({ error: 'Bien no encontrado.' });
+    }
+    if (parsed.data.status === 'verificado' && asset.locationId !== parsed.data.locationId) {
+      return response.status(409).json({
+        error: 'El bien pertenece a otra ubicación; use el estado otra_ubicacion.',
+      });
     }
     const observedAt = parsed.data.observedAt ?? new Date().toISOString();
     const observation = database.prepare(`
@@ -183,6 +232,7 @@ export function createApiRouter(database) {
         status_code, selected_location_id, notes, observed_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       RETURNING id, asset_id AS assetId, provisional_code AS provisionalCode,
+        inventory_session_id AS sessionId,
         status_code AS status, selected_location_id AS locationId,
         notes AS observation, observed_at AS observedAt
     `).get(

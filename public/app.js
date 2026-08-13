@@ -23,7 +23,14 @@ const elements = {
   message: document.querySelector('#message'),
 };
 
-const state = { locations: [], locationId: null, sessionId: null, asset: null, provisionalCode: null };
+const state = {
+  locations: [],
+  locationId: null,
+  sessionId: null,
+  sessionStarting: false,
+  asset: null,
+  provisionalCode: null,
+};
 
 async function api(path, options) {
   const response = await fetch(path, {
@@ -98,10 +105,13 @@ elements.section.addEventListener('change', () => {
     && section === selectedSection
   ));
   state.locationId = location?.id ?? null;
-  elements.startSession.disabled = !state.locationId;
+  elements.startSession.disabled = !state.locationId || Boolean(state.sessionId) || state.sessionStarting;
 });
 
 elements.startSession.addEventListener('click', async () => {
+  if (!state.locationId || state.sessionId || state.sessionStarting) return;
+  state.sessionStarting = true;
+  elements.startSession.disabled = true;
   try {
     const { session } = await api('/api/sessions', {
       method: 'POST',
@@ -115,7 +125,10 @@ elements.startSession.addEventListener('click', async () => {
     elements.lookupCode.focus();
     setMessage('Sesión iniciada.');
   } catch (error) {
+    elements.startSession.disabled = !state.locationId;
     setMessage(error.message, true);
+  } finally {
+    state.sessionStarting = false;
   }
 });
 
@@ -123,7 +136,11 @@ function showAsset(asset, provisionalCode) {
   state.asset = asset;
   state.provisionalCode = provisionalCode;
   elements.assetDetails.replaceChildren();
-  elements.assetResultLabel.textContent = asset ? 'Bien encontrado' : 'Código provisional';
+  const verifiedOption = elements.observationStatus.querySelector('option[value="verificado"]');
+  elements.observationStatus.disabled = false;
+  verifiedOption.disabled = false;
+  elements.observationNotes.required = false;
+  elements.assetResultLabel.textContent = asset ? 'Bien encontrado' : 'Hallazgo provisional';
   elements.assetName.textContent = asset?.name || 'Sin coincidencia en el inventario';
   if (asset) {
     appendDetail(elements.assetDetails, 'Código del bien', asset.assetCode);
@@ -131,8 +148,17 @@ function showAsset(asset, provisionalCode) {
     appendDetail(elements.assetDetails, 'Marca', asset.brand);
     appendDetail(elements.assetDetails, 'Modelo', asset.model);
     appendDetail(elements.assetDetails, 'Serie', asset.serialNumber);
+    if (asset.locationId === state.locationId) {
+      elements.observationStatus.value = 'verificado';
+    } else {
+      elements.observationStatus.value = 'otra_ubicacion';
+      verifiedOption.disabled = true;
+    }
   } else {
     appendDetail(elements.assetDetails, 'Código ingresado', provisionalCode);
+    elements.observationStatus.value = 'desconocido';
+    elements.observationStatus.disabled = true;
+    elements.observationNotes.required = true;
   }
   elements.assetResult.hidden = false;
   elements.observationForm.hidden = false;
@@ -149,7 +175,7 @@ elements.lookupForm.addEventListener('submit', async (event) => {
   } catch (error) {
     if (error.message === 'Bien no encontrado.') {
       showAsset(null, code);
-      setMessage('El código se registrará como provisional.');
+      setMessage('Hallazgo provisional: agregue una observación obligatoria.');
     } else {
       setMessage(error.message, true);
     }
@@ -172,6 +198,8 @@ elements.observationForm.addEventListener('submit', async (event) => {
     });
     elements.lookupForm.reset();
     elements.observationForm.reset();
+    elements.observationStatus.disabled = false;
+    elements.observationNotes.required = false;
     elements.assetResult.hidden = true;
     elements.observationForm.hidden = true;
     state.asset = null;
@@ -188,7 +216,7 @@ async function updateProgress() {
   const { summary } = await api(`/api/sessions/${state.sessionId}/summary`);
   elements.progress.value = summary.progressPercent;
   elements.progress.textContent = `${summary.progressPercent}%`;
-  elements.progressLabel.textContent = `${summary.observed} de ${summary.totalAssets} revisados`;
+  elements.progressLabel.textContent = `${summary.verifiedExpected} de ${summary.totalAssets} verificados`;
   elements.progressPercent.textContent = `${summary.progressPercent}%`;
   return summary;
 }
@@ -198,7 +226,10 @@ elements.closeSession.addEventListener('click', async () => {
     const { summary } = await api(`/api/sessions/${state.sessionId}/close`, { method: 'POST' });
     elements.summaryDetails.replaceChildren();
     appendDetail(elements.summaryDetails, 'Bienes esperados', String(summary.totalAssets));
-    appendDetail(elements.summaryDetails, 'Observaciones', String(summary.observed));
+    appendDetail(elements.summaryDetails, 'Observaciones', String(summary.observationCount));
+    appendDetail(elements.summaryDetails, 'Bienes esperados verificados', String(summary.verifiedExpected));
+    appendDetail(elements.summaryDetails, 'Diferencias de ubicación', String(summary.locationDifferences));
+    appendDetail(elements.summaryDetails, 'Hallazgos provisionales', String(summary.provisionalFindings));
     appendDetail(elements.summaryDetails, 'Pendientes', String(summary.pending));
     appendDetail(elements.summaryDetails, 'Avance', `${summary.progressPercent}%`);
     elements.summaryPanel.hidden = false;

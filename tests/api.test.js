@@ -7,6 +7,7 @@ import { createApp } from '../src/server.js';
 let database;
 let app;
 let locationId;
+let otherLocationId;
 let assetId;
 
 beforeEach(() => {
@@ -30,7 +31,15 @@ beforeEach(() => {
     ) VALUES ('0010600073', ?, ?, 'Bien sintético', '0000000123')
     RETURNING id
   `).get(inventoryImport.id, location.id);
+  const otherLocation = database.prepare(`
+    INSERT INTO locations (
+      location_code, name, direction, department, section
+    ) VALUES ('synthetic-location-other', 'Otra ubicación sintética',
+      'Otra dirección sintética', 'Otro departamento sintético', 'Otra sección sintética')
+    RETURNING id
+  `).get();
   locationId = location.id;
+  otherLocationId = otherLocation.id;
   assetId = asset.id;
   app = createApp({ database });
 });
@@ -40,7 +49,7 @@ afterEach(() => database.close());
 describe('inventory API', () => {
   test('lists locations and finds assets by location, search and exact code', async () => {
     const locations = await request(app).get('/api/locations').expect(200);
-    expect(locations.body.locations).toHaveLength(1);
+    expect(locations.body.locations).toHaveLength(2);
 
     const assets = await request(app).get(`/api/assets?locationId=${locationId}`).expect(200);
     expect(assets.body.assets).toHaveLength(1);
@@ -73,6 +82,10 @@ describe('inventory API', () => {
     const summary = await request(app).get(`/api/sessions/${sessionId}/summary`).expect(200);
     expect(summary.body.summary).toMatchObject({
       totalAssets: 1,
+      observationCount: 1,
+      verifiedExpected: 1,
+      locationDifferences: 0,
+      provisionalFindings: 0,
       observed: 1,
       pending: 0,
       progressPercent: 100,
@@ -83,13 +96,23 @@ describe('inventory API', () => {
     expect(closed.body.summary.status).toBe('closed');
   });
 
-  test('accepts a provisional synthetic code for an unknown asset', async () => {
+  test('requires an unknown status and notes for a provisional synthetic code', async () => {
     const created = await request(app)
       .post('/api/sessions')
       .send({ locationId })
       .expect(201);
 
-    const response = await request(app)
+    await request(app)
+      .post(`/api/sessions/${created.body.session.id}/observations`)
+      .send({
+        provisionalCode: 'SINTETICO-0001',
+        status: 'verificado',
+        locationId,
+        observation: '',
+      })
+      .expect(400);
+
+    await request(app)
       .post(`/api/sessions/${created.body.session.id}/observations`)
       .send({
         provisionalCode: 'SINTETICO-0001',
@@ -97,11 +120,145 @@ describe('inventory API', () => {
         locationId,
         observation: '',
       })
+      .expect(400);
+
+    const response = await request(app)
+      .post(`/api/sessions/${created.body.session.id}/observations`)
+      .send({
+        provisionalCode: 'SINTETICO-0001',
+        status: 'desconocido',
+        locationId,
+        observation: 'Hallazgo provisional completamente sintético',
+      })
       .expect(201);
 
     expect(response.body.observation).toMatchObject({
+      sessionId: created.body.session.id,
       provisionalCode: 'SINTETICO-0001',
       status: 'desconocido',
     });
+    expect(response.body.observation.assetId).toBeNull();
+
+    const summary = await request(app)
+      .get(`/api/sessions/${created.body.session.id}/summary`)
+      .expect(200);
+    expect(summary.body.summary).toMatchObject({
+      observationCount: 1,
+      verifiedExpected: 0,
+      provisionalFindings: 1,
+      observed: 0,
+      pending: 1,
+      progressPercent: 0,
+    });
+  });
+
+  test('rejects verified when the asset belongs to another location', async () => {
+    const created = await request(app)
+      .post('/api/sessions')
+      .send({ locationId: otherLocationId })
+      .expect(201);
+
+    const rejected = await request(app)
+      .post(`/api/sessions/${created.body.session.id}/observations`)
+      .send({
+        assetId,
+        status: 'verificado',
+        locationId: otherLocationId,
+        observation: '',
+      })
+      .expect(409);
+    expect(rejected.body.error).toContain('otra ubicación');
+
+    await request(app)
+      .post(`/api/sessions/${created.body.session.id}/observations`)
+      .send({
+        assetId,
+        status: 'otra_ubicacion',
+        locationId: otherLocationId,
+        observation: 'Caso completamente sintético',
+      })
+      .expect(201);
+  });
+
+  test('keeps the exact 12-item closing summary consistent before and after close', async () => {
+    const inventoryImportId = database
+      .prepare("SELECT id FROM inventory_imports WHERE import_code = 'synthetic-import'")
+      .get().id;
+    const insertAsset = database.prepare(`
+      INSERT INTO assets (
+        asset_code, inventory_import_id, location_id, name, scanner_code
+      ) VALUES (?, ?, ?, ?, ?)
+    `);
+    for (let index = 2; index <= 12; index += 1) {
+      const suffix = String(index).padStart(9, '0');
+      insertAsset.run(
+        `1${suffix}`,
+        inventoryImportId,
+        locationId,
+        `Bien sintético ${index}`,
+        `2${suffix}`,
+      );
+    }
+    const otherAsset = database.prepare(`
+      INSERT INTO assets (
+        asset_code, inventory_import_id, location_id, name, scanner_code
+      ) VALUES ('3000000001', ?, ?, 'Bien de otra ubicación sintética', '4000000001')
+      RETURNING id
+    `).get(inventoryImportId, otherLocationId);
+
+    const created = await request(app)
+      .post('/api/sessions')
+      .send({ locationId })
+      .expect(201);
+    const sessionId = created.body.session.id;
+
+    const verified = await request(app)
+      .post(`/api/sessions/${sessionId}/observations`)
+      .send({
+        assetId,
+        status: 'verificado',
+        locationId,
+        observation: '',
+      })
+      .expect(201);
+    expect(verified.body.observation.sessionId).toBe(sessionId);
+
+    const differentLocation = await request(app)
+      .post(`/api/sessions/${sessionId}/observations`)
+      .send({
+        assetId: otherAsset.id,
+        status: 'otra_ubicacion',
+        locationId,
+        observation: 'Diferencia completamente sintética',
+      })
+      .expect(201);
+    expect(differentLocation.body.observation.sessionId).toBe(sessionId);
+
+    const expectedMetrics = {
+      totalAssets: 12,
+      observationCount: 2,
+      verifiedExpected: 1,
+      locationDifferences: 1,
+      provisionalFindings: 0,
+      observed: 1,
+      pending: 11,
+      progressPercent: 8,
+    };
+    const beforeClose = await request(app)
+      .get(`/api/sessions/${sessionId}/summary`)
+      .expect(200);
+    expect(beforeClose.body.summary).toMatchObject({ status: 'open', ...expectedMetrics });
+
+    const afterClose = await request(app)
+      .post(`/api/sessions/${sessionId}/close`)
+      .expect(200);
+    expect(afterClose.body.summary).toMatchObject({ status: 'closed', ...expectedMetrics });
+
+    const persistedLinks = database.prepare(`
+      SELECT COUNT(*) AS count
+      FROM observations
+      WHERE inventory_session_id = ?
+    `).get(sessionId);
+    expect(persistedLinks.count).toBe(2);
   });
 });
