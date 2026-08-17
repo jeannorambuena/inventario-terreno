@@ -81,18 +81,17 @@ if ($Mode -eq 'RESTAURAR' -and $ImportExcelPath) {
 
 Set-Location -LiteralPath $ProjectRoot
 
-foreach ($tool in @('git', 'gh', 'node', 'npm.cmd')) {
+foreach ($tool in @('git', 'node', 'npm.cmd')) {
   Assert-Command -Name $tool
+}
+
+if (Get-Command gh -ErrorAction SilentlyContinue) {
+  Write-Host 'GitHub CLI detectado (opcional). No es necesario para preparar una copia ya clonada.'
 }
 
 $NodeVersion = (& node --version).TrimStart('v')
 if ([version]$NodeVersion -lt [version]'24.0.0' -or [version]$NodeVersion -ge [version]'25.0.0') {
   throw "Se requiere Node.js 24.x. Version detectada: $NodeVersion"
-}
-
-$null = & gh auth status 2>&1
-if ($LASTEXITCODE -ne 0) {
-  throw 'GitHub CLI esta instalado, pero no hay una sesion autenticada. Ejecute gh auth login.'
 }
 
 foreach ($privateDirectory in @('imports', 'data', 'backups')) {
