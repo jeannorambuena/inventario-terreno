@@ -161,6 +161,14 @@ La interfaz principal queda disponible en:
 http://localhost:3180
 ```
 
+## Operación sin Internet
+
+Inventario Terreno puede trabajar sin Internet utilizando el **Samsung como hotspot Wi‑Fi local** y el notebook como cliente. El teléfono se conecta al servidor del notebook mediante una IPv4 privada y el enlace móvil temporal de la sesión.
+
+Antes de depender de este modo en terreno, realice una prueba completa con datos móviles y Wi‑Fi externo desactivados.
+
+Guía operativa y checklist de emergencia: [docs/MODO-OFFLINE-SAMSUNG.md](docs/MODO-OFFLINE-SAMSUNG.md).
+
 ## Datos privados
 
 GitHub contiene el **software**, no los datos operacionales.
