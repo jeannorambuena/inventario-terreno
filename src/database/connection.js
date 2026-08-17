@@ -18,6 +18,27 @@ function ensureColumn(database, tableName, columnName, definition) {
   }
 }
 
+function tableExists(database, tableName) {
+  return Boolean(database.prepare(`
+    SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?
+  `).get(tableName));
+}
+
+function prepareExistingSchema(database) {
+  if (tableExists(database, 'observations')) {
+    ensureColumn(database, 'observations', 'active', 'INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))');
+    ensureColumn(database, 'observations', 'version_number', 'INTEGER NOT NULL DEFAULT 1');
+    ensureColumn(database, 'observations', 'supersedes_observation_id', 'INTEGER REFERENCES observations(id)');
+    ensureColumn(database, 'observations', 'annulled_at', 'TEXT');
+    ensureColumn(database, 'observations', 'operator_code', "TEXT NOT NULL DEFAULT ''");
+    ensureColumn(database, 'observations', 'device_code', "TEXT NOT NULL DEFAULT ''");
+  }
+  if (tableExists(database, 'evidence_files')) {
+    ensureColumn(database, 'evidence_files', 'active', 'INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))');
+    ensureColumn(database, 'evidence_files', 'annulled_at', 'TEXT');
+  }
+}
+
 function migrateLegacySchema(database) {
   ensureColumn(database, 'inventory_imports', 'sheet_name', "TEXT NOT NULL DEFAULT 'BD_SQL'");
   ensureColumn(database, 'inventory_imports', 'row_count', 'INTEGER NOT NULL DEFAULT 0');
@@ -33,6 +54,21 @@ function migrateLegacySchema(database) {
   ensureColumn(database, 'inventory_sessions', 'location_id', 'INTEGER REFERENCES locations(id)');
   ensureColumn(database, 'inventory_sessions', 'cancelled_at', 'TEXT');
   ensureColumn(database, 'inventory_sessions', 'cancellation_reason', 'TEXT');
+  ensureColumn(database, 'inventory_sessions', 'operator_code', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(database, 'inventory_sessions', 'device_code', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(database, 'inventory_sessions', 'closure_confirmed_at', 'TEXT');
+  ensureColumn(database, 'observations', 'active', 'INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))');
+  ensureColumn(database, 'observations', 'version_number', 'INTEGER NOT NULL DEFAULT 1');
+  ensureColumn(database, 'observations', 'supersedes_observation_id', 'INTEGER REFERENCES observations(id)');
+  ensureColumn(database, 'observations', 'annulled_at', 'TEXT');
+  ensureColumn(database, 'observations', 'operator_code', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(database, 'observations', 'device_code', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(database, 'audit_log', 'inventory_session_id', 'INTEGER');
+  ensureColumn(database, 'audit_log', 'entity_id', 'INTEGER');
+  ensureColumn(database, 'audit_log', 'operator_code', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(database, 'audit_log', 'device_code', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(database, 'evidence_files', 'active', 'INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))');
+  ensureColumn(database, 'evidence_files', 'annulled_at', 'TEXT');
 
   const observationColumns = getColumns(database, 'observations');
   const legacyAssetColumn = observationColumns.find(({ name }) => name === 'asset_id');
@@ -54,11 +90,18 @@ function migrateLegacySchema(database) {
           notes TEXT NOT NULL DEFAULT '',
           observed_at TEXT NOT NULL,
           created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+          active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+          version_number INTEGER NOT NULL DEFAULT 1,
+          supersedes_observation_id INTEGER,
+          annulled_at TEXT,
+          operator_code TEXT NOT NULL DEFAULT '',
+          device_code TEXT NOT NULL DEFAULT '',
           CHECK (asset_id IS NOT NULL OR length(trim(provisional_code)) > 0),
           CHECK (status_code IN ('verificado', 'otra_ubicacion', 'no_ubicado', 'desconocido', 'dato_distinto')),
           FOREIGN KEY (inventory_session_id) REFERENCES inventory_sessions(id),
           FOREIGN KEY (asset_id) REFERENCES assets(id),
-          FOREIGN KEY (selected_location_id) REFERENCES locations(id)
+          FOREIGN KEY (selected_location_id) REFERENCES locations(id),
+          FOREIGN KEY (supersedes_observation_id) REFERENCES observations(id)
         );
 
         INSERT INTO observations (
@@ -92,6 +135,12 @@ function migrateLegacySchema(database) {
       ON observations(inventory_session_id);
     CREATE INDEX IF NOT EXISTS idx_observations_asset_id
       ON observations(asset_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_observations_active_session_asset
+      ON observations(inventory_session_id, asset_id)
+      WHERE active = 1 AND asset_id IS NOT NULL;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_observations_active_session_provisional
+      ON observations(inventory_session_id, provisional_code)
+      WHERE active = 1 AND provisional_code IS NOT NULL;
   `);
 
   database.exec(`
@@ -123,6 +172,7 @@ export function openDatabase(databasePath = getDatabasePath()) {
 
   try {
     database.pragma('foreign_keys = ON');
+    prepareExistingSchema(database);
     database.exec(readFileSync(schemaPath, 'utf8'));
     migrateLegacySchema(database);
     return database;

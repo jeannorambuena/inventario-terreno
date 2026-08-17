@@ -21,11 +21,11 @@ No configure redirección de puertos en el router. El servicio está diseñado s
 
 El enlace contiene un token temporal exclusivo. Renovar el enlace invalida el anterior; cerrar la sesión invalida todos sus enlaces.
 
-## 3. Probar un código correcto
+## 3. Probar un código correcto (flujo manual-first)
 
 1. Ingrese manualmente un código perteneciente a la ubicación seleccionada.
-2. Compruebe que aparezca `Corresponde a esta ubicación` y el estado sugerido sea `Verificado`.
-3. Registre la observación y confirme que aumente el avance.
+2. Pulse Enter y confirme que el bien correcto se registra sin pasos adicionales.
+3. Confirme que aumente el avance.
 4. Intente registrar el mismo código otra vez y confirme que la aplicación lo rechace como duplicado.
 
 ## 4. Probar un bien de otra ubicación
@@ -38,19 +38,20 @@ El enlace contiene un token temporal exclusivo. Renovar el enlace invalida el an
 ## 5. Probar un código desconocido
 
 1. Ingrese un código sintético que no exista en el inventario.
-2. Compruebe que aparezca `Hallazgo provisional desconocido`.
-3. Confirme que el estado quede en `Desconocido` y que la observación sea obligatoria.
-4. Registre el hallazgo y confirme que no aumente los bienes esperados verificados.
+2. Compruebe que aparezca como bien no registrado y que el sistema genere el identificador `PROV-S…`.
+3. Complete descripción, punto físico y evidencia de bien completo.
+4. Confirme que no aumente los bienes esperados revisados.
 
-## 6. Probar la cámara
+## 6. Probar evidencia fotográfica
 
-Pulse `Usar cámara`. Primero se intenta `BarcodeDetector`; si no está disponible, se usa ZXing cargado desde el notebook. Ambos procesan el video dentro del Samsung y no guardan fotografías.
+Abra una incidencia, seleccione el tipo de evidencia y pulse `Agregar foto`. Puede adjuntar varias fotografías a la misma observación. Las imágenes se guardan sólo en el notebook, con tamaño y SHA-256; no se analizan ni se envían a Internet.
 
-Los navegadores suelen bloquear la cámara cuando la página se abre mediante HTTP desde una IP local. En ese caso se muestra una explicación y la entrada manual permanece disponible. HTTPS local queda fuera del MVP actual.
+La cámara requiere HTTPS en el Samsung. Si no está disponible, mantenga el ingreso manual de códigos y registre desde el notebook una excepción de evidencia estructurada sólo cuando realmente corresponda.
 
 ## 7. Cerrar la sesión
 
 1. Regrese a la interfaz del notebook.
-2. Pulse `Cerrar sesión`.
-3. Compruebe el resumen: observaciones, verificados esperados, diferencias de ubicación, hallazgos provisionales, pendientes y porcentaje.
-4. En el Samsung, intente actualizar la página y confirme que el token expiró.
+2. Pulse `¿Puedo salir de esta oficina?`.
+3. Confirme que el servidor impida cerrar mientras exista un pendiente, ambigüedad, incidencia incompleta o evidencia requerida faltante.
+4. Resuelva todo, revise el resumen, marque la confirmación y finalice.
+5. En el Samsung, actualice y confirme que el enlace quedó revocado.

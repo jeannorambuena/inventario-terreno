@@ -14,7 +14,22 @@ const PORT = 3180;
 const HTTPS_PORT = 3443;
 const publicPath = resolve(dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
-export function createApp({ database, networkInfoProvider = getMobileNetworkInfo } = {}) {
+function isLoopbackClient(address = '') {
+  const normalized = String(address).replace(/^::ffff:/, '');
+  return normalized === '127.0.0.1' || normalized === '::1';
+}
+
+function isMobileLanPath(request) {
+  if (request.path === '/api/health' || request.path === '/api/network-info' || request.path === '/mobile') return true;
+  if (['/mobile.js', '/mobile.css', '/incidence.js', '/code-normalization.js', '/icons.svg'].includes(request.path)) return true;
+  return /^\/api\/sessions\/\d+\/mobile(?:$|-observations(?:\/\d+\/evidence)?$|-incidences$)/.test(request.path);
+}
+
+export function createApp({
+  database,
+  networkInfoProvider = getMobileNetworkInfo,
+  evidenceRoot,
+} = {}) {
   const app = express();
 
   app.disable('x-powered-by');
@@ -24,6 +39,12 @@ export function createApp({ database, networkInfoProvider = getMobileNetworkInfo
     }
     return next();
   });
+  app.use((request, response, next) => {
+    if (isLoopbackClient(request.socket.remoteAddress) || isMobileLanPath(request)) return next();
+    return response.status(403).json({
+      error: 'La administración se utiliza desde el notebook. El teléfono requiere su enlace temporal de sesión.',
+    });
+  });
   app.use(express.json());
 
   app.get('/api/health', (_request, response) => {
@@ -31,27 +52,20 @@ export function createApp({ database, networkInfoProvider = getMobileNetworkInfo
   });
 
   if (database) {
-    app.use('/api', createApiRouter(database, { networkInfoProvider }));
+    app.use('/api', createApiRouter(database, { networkInfoProvider, evidenceRoot }));
   }
 
   app.get('/mobile', (_request, response) => response.sendFile(resolve(publicPath, 'mobile.html')));
-  app.get('/vendor/zxing-browser.min.js', (_request, response) => {
-    response.sendFile(resolve(
-      dirname(fileURLToPath(import.meta.url)),
-      '..',
-      'node_modules',
-      '@zxing',
-      'browser',
-      'umd',
-      'zxing-browser.min.js',
-    ));
-  });
-
+  app.get('/reports', (_request, response) => response.sendFile(resolve(publicPath, 'reports.html')));
   app.use(express.static(publicPath));
 
   app.use((error, _request, response, _next) => {
-    console.error('Error interno del servicio local.');
-    response.status(500).json({ error: 'Error interno del servicio local.' });
+    const status = Number(error.status) || (error.code === 'LIMIT_FILE_SIZE' ? 413 : 500);
+    if (status >= 500) console.error('Error interno del servicio local.');
+    const message = status === 413
+      ? 'La fotografía supera el límite permitido de 8 MB.'
+      : status < 500 ? error.message : 'Error interno del servicio local.';
+    response.status(status).json({ error: message });
   });
 
   return app;

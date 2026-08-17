@@ -67,6 +67,10 @@ npm.cmd run backup
 
 Antes de iniciar operación real, ejecutar las pruebas generales y móviles y crear un respaldo. Después verificar HTTP y HTTPS `200` tanto en localhost como en una IPv4 privada del notebook. Crear otro respaldo al finalizar la jornada. No configurar redirección de puertos ni exponer el servicio a Internet.
 
+El flujo oficial es manual-first: código + Enter para el caso correcto. No reactivar ZXing, `BarcodeDetector`, OCR ni lectura de códigos por cámara. La cámara móvil se reserva para fotografías tipificadas de incidencias, almacenadas sólo localmente.
+
+No cerrar una oficina por decisión del cliente. El servidor debe evaluar que todos los bienes esperados tengan resultado explícito, que no existan ambigüedades y que las incidencias sean estructuralmente suficientes. Correcciones, anulaciones, excepciones de evidencia y cierre deben quedar en `audit_log`; nunca se destruyen silenciosamente observaciones o evidencias históricas.
+
 ## Protección de datos
 
 - Tratar `imports/ACTIVOS.xlsx` como fuente original de solo lectura: nunca modificarla, sobrescribirla, renombrarla ni usarla como salida.

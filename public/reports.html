@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#34454c">
+    <title>Informes · Inventario Terreno</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/reports.css">
+  </head>
+  <body>
+    <div class="app-shell report-shell">
+      <header class="app-bar">
+        <div class="app-bar__inner report-appbar">
+          <div class="app-identity">
+            <span class="app-mark" aria-hidden="true">
+              <svg class="icon icon--brand"><use href="/icons.svg#inventory"></use></svg>
+            </span>
+            <div>
+              <p class="app-kicker">Control del operativo</p>
+              <h1>Informes de Inventario Terreno</h1>
+            </div>
+          </div>
+          <a class="button-link button-link--light no-print" href="/">Volver a terreno</a>
+        </div>
+      </header>
+
+      <main class="app-main reports-main">
+        <section class="report-controls no-print" aria-labelledby="report-selection-title">
+          <div>
+            <p class="section-kicker">Consulta local</p>
+            <h2 id="report-selection-title">Seleccione una sesión</h2>
+          </div>
+          <label>Sesión y ubicación
+            <select id="session-select"><option value="">Seleccione…</option></select>
+          </label>
+          <button id="print-report" type="button" disabled>Imprimir / guardar PDF</button>
+        </section>
+
+        <section class="report-section" aria-labelledby="overview-title">
+          <div class="report-heading">
+            <div>
+              <p class="section-kicker">Vista general</p>
+              <h2 id="overview-title">Tablero de avance del operativo</h2>
+            </div>
+            <time id="overview-cutoff"></time>
+          </div>
+          <div id="overview-metrics" class="report-metrics"></div>
+          <progress id="overview-progress" max="100" value="0">0%</progress>
+          <div id="unit-tree" class="unit-tree"></div>
+        </section>
+
+        <div id="session-report" hidden>
+          <section id="executive-report" class="report-section print-report" aria-labelledby="executive-title">
+            <div class="report-heading">
+              <div>
+                <p class="section-kicker">Jefatura</p>
+                <h2 id="executive-title">Resumen ejecutivo</h2>
+              </div>
+              <time id="report-cutoff"></time>
+            </div>
+            <dl id="report-scope" class="report-scope"></dl>
+            <h3>Avance</h3>
+            <div id="executive-progress" class="report-metrics"></div>
+            <h3>Resultados</h3>
+            <div id="executive-results" class="report-metrics"></div>
+            <h3>Situaciones relevantes</h3>
+            <div id="executive-situations" class="report-metrics"></div>
+            <p id="evidence-summary" class="evidence-summary"></p>
+            <a href="#incidence-report" class="text-link no-print">Ver detalle de incidencias</a>
+          </section>
+
+          <section id="alerts-section" class="report-section no-print" aria-labelledby="alerts-title">
+            <div class="report-heading">
+              <div>
+                <p class="section-kicker">Acciones concretas</p>
+                <h2 id="alerts-title">Alertas útiles</h2>
+              </div>
+            </div>
+            <div id="alerts" class="alert-list"></div>
+          </section>
+
+          <section id="close-report" class="report-section print-report" aria-labelledby="close-title">
+            <div class="report-heading">
+              <div>
+                <p class="section-kicker">Realidad observada en terreno</p>
+                <h2 id="close-title">Informe de cierre de inventario en terreno</h2>
+              </div>
+              <span id="close-state" class="unit-state"></span>
+            </div>
+            <p class="report-disclaimer">Este informe no modifica el maestro municipal ni afirma que las incidencias hayan sido regularizadas administrativamente.</p>
+            <dl id="close-details" class="report-detail-grid"></dl>
+          </section>
+
+          <section id="incidence-report" class="report-section" aria-labelledby="incidence-title">
+            <div class="report-heading">
+              <div>
+                <p class="section-kicker">Conciliación</p>
+                <h2 id="incidence-title">Informe de incidencias</h2>
+              </div>
+              <span id="incidence-count" class="count-badge">0</span>
+            </div>
+            <fieldset class="incidence-filters no-print">
+              <legend>Filtros accionables combinables</legend>
+              <label><input type="checkbox" value="problema_etiqueta"> Problema de etiqueta</label>
+              <label><input type="checkbox" value="sin_etiqueta"> Sin etiqueta</label>
+              <label><input type="checkbox" value="datos_no_coinciden"> Datos no coinciden</label>
+              <label><input type="checkbox" value="no_operativo"> No operativo</label>
+              <label><input type="checkbox" value="malo"> Malo</label>
+              <label><input type="checkbox" value="propuesta_baja"> Propuesta de baja</label>
+              <label><input type="checkbox" value="otra_ubicacion"> Otra ubicación</label>
+              <label><input type="checkbox" value="bien_no_registrado"> Bien no registrado</label>
+              <label><input type="checkbox" value="pendiente_identificar"> Pendiente de identificar</label>
+              <label><input type="checkbox" value="requiere_revision"> Requiere revisión</label>
+              <label><input type="checkbox" value="con_fotografia"> Con fotografía</label>
+            </fieldset>
+            <div id="incidence-list" class="incidence-list"></div>
+          </section>
+
+          <section class="report-section no-print" aria-labelledby="regularization-title">
+            <div class="report-heading">
+              <div>
+                <p class="section-kicker">Seguimiento administrativo</p>
+                <h2 id="regularization-title">Pendientes de regularización</h2>
+              </div>
+            </div>
+            <p class="report-disclaimer">Acciones sugeridas a partir de lo observado. No modifican automáticamente el inventario maestro.</p>
+            <div id="regularization-list" class="regularization-list"></div>
+          </section>
+        </div>
+
+        <p id="report-message" class="app-alert" role="status" aria-live="polite"></p>
+      </main>
+    </div>
+
+    <dialog id="incidence-dialog" aria-labelledby="incidence-dialog-title">
+      <article class="report-dialog">
+        <div class="report-heading">
+          <div>
+            <p id="incidence-kind" class="section-kicker"></p>
+            <h2 id="incidence-dialog-title">Detalle de incidencia</h2>
+          </div>
+          <button id="close-incidence" type="button" class="secondary">Cerrar</button>
+        </div>
+        <div id="incidence-detail"></div>
+      </article>
+    </dialog>
+
+    <dialog id="photo-dialog" aria-labelledby="photo-dialog-title">
+      <article class="photo-viewer">
+        <div class="report-heading">
+          <h2 id="photo-dialog-title">Evidencia fotográfica</h2>
+          <button id="close-photo" type="button" class="secondary">Volver a la incidencia</button>
+        </div>
+        <img id="photo-full" alt="Evidencia de la incidencia">
+        <p id="photo-type"></p>
+      </article>
+    </dialog>
+
+    <script type="module" src="/reports.js"></script>
+  </body>
+</html>

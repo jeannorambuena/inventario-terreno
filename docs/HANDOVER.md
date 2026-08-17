@@ -45,11 +45,11 @@ Nunca copie una base sobre `data/inventario.sqlite` existente. Nunca importe Exc
 6. Iniciar con `scripts/start.ps1`.
 7. Comprobar `http://localhost:3180/api/health` y `https://IP:3443/api/health`.
 
-La entrada manual permanece disponible si la cámara no puede utilizarse.
+El ingreso de códigos es exclusivamente manual-first (código + Enter). La cámara se utiliza sólo para evidencia fotográfica de incidencias y nunca analiza códigos.
 
 ## Cierre de jornada y retorno de resultados
 
-1. Finalizar las sesiones desde la aplicación; no editar SQLite manualmente.
+1. Abrir **¿Puedo salir de esta oficina?**, resolver todos los bloqueadores y finalizar las sesiones desde la aplicación; no editar SQLite manualmente.
 2. Detener el servidor de forma controlada.
 3. Ejecutar un respaldo final con `npm.cmd run backup`.
 4. Calcular SHA-256 del respaldo y registrar solo metadatos seguros.

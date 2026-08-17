@@ -10,15 +10,8 @@ import {
   createSafeNetworkError,
   temporaryConnectionMessage,
 } from '../public/mobile-polling.js';
-import {
-  createDetectionGate,
-  createLookupCodeVariants,
-  getCameraEnhancements,
-  getCentralScanRegion,
-  getNativeOneDimensionalFormats,
-  getScannerFeedback,
-  getZxingOneDimensionalFormats,
-} from '../public/mobile-scanner.js';
+import { createLookupCodeVariants } from '../public/code-normalization.js';
+import { serializeIncidence } from '../public/incidence.js';
 
 const syntheticNetwork = () => [{ interface: 'Synthetic LAN', address: '192.168.50.10' }];
 const authorization = (token) => ({ Authorization: `Bearer ${token}` });
@@ -31,6 +24,13 @@ let app;
 let locationId;
 let otherLocationId;
 let localAssetId;
+let otherAssetId;
+const closePayload = {
+  confirm: true,
+  statement: 'field-review-complete',
+  operatorCode: 'OPERADOR-MOVIL-TEST',
+  deviceCode: 'NOTEBOOK-TEST',
+};
 
 beforeEach(() => {
   database = openDatabase(':memory:');
@@ -63,9 +63,9 @@ beforeEach(() => {
   insertAsset.run(
     '0010000002', inventoryImportId, locationId, 'Bien móvil sintético B', '0020000002',
   );
-  insertAsset.run(
+  otherAssetId = insertAsset.run(
     '0030000001', inventoryImportId, otherLocationId, 'Bien sintético de otra ubicación', '0040000001',
-  );
+  ).lastInsertRowid;
   app = createApp({ database, networkInfoProvider: syntheticNetwork });
 });
 
@@ -104,142 +104,50 @@ describe('mobile integration API', () => {
     expect(response.body.lookup.asset).toMatchObject({ id: localAssetId, scannerCode: '0020000001' });
   });
 
-  test('uses only advertised native 1D formats, including Code 128 and Code 39', async () => {
-    class SyntheticBarcodeDetector {
-      static async getSupportedFormats() {
-        return ['qr_code', 'code_39', 'code_128', 'ean_13'];
-      }
-    }
-    await expect(getNativeOneDimensionalFormats(SyntheticBarcodeDetector)).resolves.toEqual([
-      'code_128', 'code_39', 'ean_13',
-    ]);
+  test('keeps barcode scanner engines outside runtime while allowing private photo evidence', () => {
+    expect(mobileSource).not.toMatch(/mobile-scanner|BarcodeDetector|ZXing|getUserMedia|startCamera|cameraButton/);
+    expect(mobileHtml).not.toMatch(/Escanear etiqueta|Intentar lectura|torch|zoom|zxing|camera-preview/i);
+    expect(mobileHtml).not.toContain('/vendor/zxing-browser.min.js');
+    expect(mobileHtml).toContain('Agregar foto');
+    expect(mobileHtml).toMatch(/type="file"[^>]+capture="environment"/);
   });
 
-  test('configures the local ZXing reader with all compatible priority 1D formats', () => {
-    const BarcodeFormat = {
-      CODE_128: 4, CODE_39: 2, CODABAR: 1, ITF: 8,
-      EAN_13: 7, EAN_8: 6, UPC_A: 14, UPC_E: 15,
-    };
-    const supported = getZxingOneDimensionalFormats({
-      BrowserMultiFormatReader: class {}, BarcodeFormat,
-    });
-    expect(supported.map(({ name }) => name)).toEqual([
-      'code_128', 'code_39', 'codabar', 'itf', 'ean_13', 'ean_8', 'upc_a', 'upc_e',
-    ]);
+  test('uses a manual-first form and submits with Enter or the Registrar button', () => {
+    expect(mobileHtml).toContain('id="lookup-form"');
+    expect(mobileHtml).toContain('inputmode="text"');
+    expect(mobileHtml).toContain('Registrar');
+    expect(mobileSource).toContain("elements.lookupForm.addEventListener('submit'");
+    expect(mobileSource).toContain('await loadSession(code)');
   });
 
-  test('uses local ZXing first and BarcodeDetector only when ZXing is unavailable', () => {
-    const startCameraSource = mobileSource.slice(
-      mobileSource.indexOf('async function startCamera()'),
-      mobileSource.indexOf('async function analyzeCurrentFrame()'),
+  test('automatically registers one correct match and returns focus to the code field', () => {
+    const lookup = mobileSource.slice(
+      mobileSource.indexOf('async function handleLookup'),
+      mobileSource.indexOf('async function loadSession'),
     );
-    expect(startCameraSource.indexOf('createZxingReader()'))
-      .toBeLessThan(startCameraSource.indexOf('getNativeOneDimensionalFormats'));
-    expect(startCameraSource).toContain('if (state.zxingReader)');
-    expect(startCameraSource).not.toMatch(/Lector del dispositivo|Lector compatible/);
-    expect(mobileSource).toContain('[3, true]');
+    expect(lookup).toContain("lookup.classification === 'corresponde'");
+    expect(lookup).toContain("registerObservation({ lookup, status: 'verificado' })");
+    expect(mobileSource).toContain('elements.code.focus()');
+    expect(mobileSource).toContain('Bien registrado. Listo para el siguiente código.');
   });
 
-  test('requires two identical readings, preserves zeros and accepts only once', () => {
-    const detections = [];
-    const gate = createDetectionGate((value) => detections.push(value));
-    gate.start();
-    expect(gate.accept('0010800047')).toBe(false);
-    expect(gate.accept('0010800047')).toBe(true);
-    expect(gate.accept('0010800047')).toBe(false);
-    expect(detections).toEqual(['0010800047']);
-  });
-
-  test('rejects unstable results until two consecutive values coincide', () => {
-    let currentTime = 100;
-    const detections = [];
-    const gate = createDetectionGate((value) => detections.push(value), { now: () => currentTime });
-    gate.start();
-    expect(gate.accept('01-08-00047')).toBe(false);
-    currentTime += 100;
-    expect(gate.accept('0010800047')).toBe(false);
-    currentTime += 100;
-    expect(gate.accept('01-08-00047')).toBe(false);
-    currentTime += 100;
-    expect(gate.accept('01-08-00047')).toBe(true);
-    expect(detections).toEqual(['01-08-00047']);
-  });
-
-  test('camera controls stop tracks and frame analysis remains memory-only', () => {
-    const stopCameraSource = mobileSource.slice(
-      mobileSource.indexOf('function stopCamera'),
-      mobileSource.indexOf('async function acceptScannedCode'),
+  test('serializes the three independent incidence dimensions', () => {
+    expect(serializeIncidence({
+      identification: ['etiqueta_deteriorada', 'sin_etiqueta'],
+      physical: ['no_operativo', 'propuesta_baja'],
+      situation: ['en_reparacion'],
+    })).toBe(
+      '[IDENTIFICACION:etiqueta_deteriorada] [IDENTIFICACION:sin_etiqueta] '
+      + '[ESTADO_FISICO:no_operativo] [ESTADO_FISICO:propuesta_baja] '
+      + '[SITUACION:en_reparacion]',
     );
-    const frameSource = mobileSource.slice(
-      mobileSource.indexOf('function destroyCanvas'),
-      mobileSource.indexOf('function scheduleNativeAnalysis'),
-    );
-    expect(stopCameraSource).toContain('stopAnalysis()');
-    expect(stopCameraSource).toContain('track.stop()');
-    expect(mobileSource).toContain("document.addEventListener('visibilitychange'");
-    expect(frameSource).toContain("document.createElement('canvas')");
-    expect(frameSource).toContain('state.zxingReader.decodeFromCanvas(canvas)');
-    expect(frameSource).toContain('canvas.width = 0');
-    expect(frameSource).not.toMatch(/fetch|FormData|localStorage|sessionStorage|toDataURL|toBlob/);
-    expect(mobileHtml).toContain('id="analyze-code"');
-    expect(mobileHtml).toContain('Intentar lectura ahora');
-    expect(mobileHtml).toContain('id="analyze-code" type="button" class="secondary" hidden');
   });
 
-  test('scans the central guide and occasionally the full frame in one loop', () => {
-    expect(getCentralScanRegion(1000, 500)).toEqual({ x: 70, y: 170, width: 860, height: 160 });
-    expect(getCentralScanRegion(1000, 500, true)).toEqual({ x: 0, y: 0, width: 1000, height: 500 });
-    expect(mobileSource).toContain('state.scanAttempt % 6 === 0');
-    expect(mobileSource).toContain('state.decodeBusy');
-  });
-
-  test('shows torch and zoom only when the camera advertises them', () => {
-    expect(getCameraEnhancements({})).toEqual({
-      torch: false, zoom: null, continuousFocus: false, continuousExposure: false,
-    });
-    expect(getCameraEnhancements({
-      torch: true,
-      zoom: { min: 1, max: 4, step: 0.25 },
-      focusMode: ['continuous'],
-      exposureMode: ['continuous'],
-    })).toEqual({
-      torch: true,
-      zoom: { min: 1, max: 4, step: 0.25 },
-      continuousFocus: true,
-      continuousExposure: true,
-    });
-    expect(mobileSource).toContain('elements.toggleTorch.hidden = !enhancements.torch');
-    expect(mobileSource).toContain('elements.zoomControl.hidden = !enhancements.zoom');
-  });
-
-  test('uses the required timed scanner feedback and delays the manual action', () => {
-    expect(getScannerFeedback(0)).toBe('Buscando código…');
-    expect(getScannerFeedback(5000)).toBe('Mantenga la etiqueta quieta y evite reflejos.');
-    expect(getScannerFeedback(10000)).toBe(
-      'No pudimos leerla. Limpie el lente, acerque la etiqueta o ingrese el código manualmente.',
-    );
-    expect(mobileSource).toContain('}, 5000)');
-    expect(mobileSource).toContain('}, 7000)');
-    expect(mobileSource).toContain('}, 10000)');
-  });
-
-  test('successful scanning fills the exact raw value and automatically searches', () => {
-    const accepted = mobileSource.slice(
-      mobileSource.indexOf('async function acceptScannedCode'),
-      mobileSource.indexOf('function playDetectionTone'),
-    );
-    expect(accepted).toContain('const exactCode = String(code)');
-    expect(accepted).toContain('elements.code.value = exactCode');
-    expect(accepted).toContain('await loadSession(exactCode)');
-    expect(accepted).not.toMatch(/parseInt|parseFloat|Number\(/);
-  });
-
-  test('closed, cancelled or invalid mobile access stops the camera', () => {
-    for (const functionName of ['disableExpiredLink', 'disableEndedSession', 'disableUnauthorizedAccess']) {
-      const start = mobileSource.indexOf(`function ${functionName}`);
-      const next = mobileSource.indexOf('\nfunction ', start + 10);
-      expect(mobileSource.slice(start, next)).toContain('stopCamera()');
-    }
+  test('closed, cancelled or invalid access disables every manual registration control', () => {
+    expect(mobileSource).toContain('function disableControls');
+    expect(mobileSource).toContain("querySelectorAll('input, button')");
+    expect(mobileSource).toContain("querySelectorAll('input, textarea, select, button')");
+    expect(mobileSource).toContain('elements.incidenceMode.disabled = true');
   });
 
   test('reports private network information', async () => {
@@ -381,7 +289,7 @@ describe('mobile integration API', () => {
       .expect(400);
   });
 
-  test('blocks mobile session closing while expected assets remain pending', async () => {
+  test('refuses to close a mobile session while expected assets remain pending', async () => {
     const sessionId = await createSession();
     const pairing = await pair(sessionId);
     await request(app)
@@ -389,8 +297,8 @@ describe('mobile integration API', () => {
       .set(authorization(pairing.token))
       .send({ code: '0010000001', status: 'verificado', observation: '' })
       .expect(201);
-    const blocked = await request(app).post(`/api/sessions/${sessionId}/close`).expect(409);
-    expect(blocked.body.summary).toMatchObject({ pendientes: 1, status: 'open' });
+    const closed = await request(app).post(`/api/sessions/${sessionId}/close`).send(closePayload).expect(409);
+    expect(closed.body.summary).toMatchObject({ pendientes: 1, pending: 1, status: 'open' });
   });
 
   test('requires selecting an asset when a scanner code has multiple matches', async () => {
@@ -427,7 +335,7 @@ describe('mobile integration API', () => {
       .send({ code: '0010000001', status: 'verificado', observation: '' }).expect(201);
     await request(app).post(path).set(authorization(pairing.token))
       .send({ code: '0010000002', status: 'no_ubicado', observation: 'Sintética' }).expect(201);
-    await request(app).post(`/api/sessions/${sessionId}/close`).expect(200);
+    await request(app).post(`/api/sessions/${sessionId}/close`).send(closePayload).expect(200);
     await request(app)
       .get(`/api/sessions/${sessionId}/mobile`)
       .set(authorization(pairing.token))
@@ -468,7 +376,7 @@ describe('mobile integration API', () => {
       observation: 'No debe guardarse',
     }).expect(409);
     await request(app).post(`/api/sessions/${sessionId}/pair`).expect(409);
-    await request(app).post(`/api/sessions/${sessionId}/close`).expect(409);
+    await request(app).post(`/api/sessions/${sessionId}/close`).send(closePayload).expect(409);
     await request(app).get(`/api/sessions/${sessionId}/mobile`)
       .set(authorization(pairing.token)).expect(410);
     expect(database.prepare(`
@@ -495,7 +403,7 @@ describe('mobile integration API', () => {
     expect(mobileSource).toContain('new AbortController()');
     expect(mobileSource).toContain('state.registrationInProgress');
     expect(mobileSource).toContain('state.lookupInProgress');
-    expect(mobileSource).toContain('state.scanning');
+    expect(mobileSource).not.toContain('state.scanning');
   });
 
   test('intentional AbortError is completely ignored by polling', () => {
@@ -605,14 +513,26 @@ describe('mobile integration API', () => {
     const path = `/api/sessions/${sessionId}/mobile-observations`;
     const mobile = () => request(app).post(path).set(authorization(pairing.token));
     await mobile().send({ code: '0010000001', status: 'verificado', observation: '' }).expect(201);
+    await request(app).post(`/api/sessions/${sessionId}/mobile-incidences`)
+      .set(authorization(pairing.token))
+      .field('assetId', String(otherAssetId)).field('status', 'otra_ubicacion')
+      .field('identification', JSON.stringify(['etiqueta_deteriorada']))
+      .field('physical', '[]').field('situation', JSON.stringify(['otra_ubicacion']))
+      .field('details', JSON.stringify({ label: 'deteriorada', situations: ['otra_ubicacion'], physicalPoint: { type: 'sala', reference: '' } }))
+      .expect(201);
+    const provisional = await request(app).post(`/api/sessions/${sessionId}/mobile-incidences`)
+      .set(authorization(pairing.token))
+      .field('status', 'desconocido').field('identification', JSON.stringify(['sin_etiqueta']))
+      .field('physical', '[]').field('situation', JSON.stringify(['bien_no_registrado']))
+      .field('details', JSON.stringify({ label: 'sin_etiqueta', situations: ['bien_no_registrado'], physicalPoint: { type: 'bodega', reference: '' }, provisional: { description: 'Equipo sintético adicional', observedCode: 'SINTETICO-MOVIL-01' } }))
+      .expect(201);
+    await request(app).post(`/api/sessions/${sessionId}/observations/${provisional.body.observation.id}/evidence-exceptions`)
+      .send({ evidenceType: 'bien_completo', reasonCode: 'falla_tecnica', confirm: true, operatorCode: 'TEST', deviceCode: 'NOTEBOOK-TEST' })
+      .expect(201);
     await mobile().send({
-      code: '0030000001', status: 'otra_ubicacion', observation: 'Diferencia sintética',
-    }).expect(201);
-    await mobile().send({
-      code: 'SINTETICO-MOVIL-01', status: 'desconocido', observation: 'Hallazgo sintético',
-    }).expect(201);
-    await mobile().send({
-      code: '0010000002', status: 'no_ubicado', observation: 'No ubicado sintético',
+      code: '0010000002', status: 'no_ubicado',
+      observation: '[ESTADO_FISICO:no_operativo] [ESTADO_FISICO:propuesta_baja] '
+        + '[SITUACION:pendiente_revision] No ubicado sintético',
     }).expect(201);
 
     const expected = {
@@ -622,12 +542,18 @@ describe('mobile integration API', () => {
       provisionalFindings: 1,
       bienesEsperadosRevisados: 2,
       noUbicados: 1,
+      encontrados: 1,
+      incidencias: 3,
+      problemasIdentificacion: 2,
+      malosNoOperativos: 1,
+      propuestasBaja: 1,
+      pendientesRevision: 1,
       pending: 0,
       progressPercent: 100,
     };
     const before = await request(app).get(`/api/sessions/${sessionId}/summary`).expect(200);
     expect(before.body.summary).toMatchObject(expected);
-    const closed = await request(app).post(`/api/sessions/${sessionId}/close`).expect(200);
+    const closed = await request(app).post(`/api/sessions/${sessionId}/close`).send(closePayload).expect(200);
     expect(closed.body.summary).toMatchObject(expected);
   });
 });

@@ -7,6 +7,10 @@ const verify = readFileSync(new URL('../scripts/verify.ps1', import.meta.url), '
 const start = readFileSync(new URL('../scripts/start.ps1', import.meta.url), 'utf8');
 const setupHttps = readFileSync(new URL('../scripts/setup-https.ps1', import.meta.url), 'utf8');
 const networkPowerShell = readFileSync(new URL('../scripts/network.ps1', import.meta.url), 'utf8');
+const launcher = readFileSync(new URL('../scripts/launch.ps1', import.meta.url), 'utf8');
+const stopLauncher = readFileSync(new URL('../scripts/stop-launcher.ps1', import.meta.url), 'utf8');
+const launcherCmd = readFileSync(new URL('../Iniciar Inventario Terreno.cmd', import.meta.url), 'utf8');
+const stopCmd = readFileSync(new URL('../Detener Inventario Terreno.cmd', import.meta.url), 'utf8');
 const server = readFileSync(new URL('../src/server.js', import.meta.url), 'utf8');
 
 describe('Windows assisted installation scripts', () => {
@@ -99,6 +103,33 @@ describe('Windows assisted installation scripts', () => {
     expect(server).toContain('INVENTARIO_TLS_CERT_PATH');
     expect(server).toContain('INVENTARIO_TLS_KEY_PATH');
     expect(server).toContain('HTTPS_PORT = 3443');
+  });
+
+  test('double-click launcher uses relative paths and bypasses policy only for its PowerShell process', () => {
+    expect(launcherCmd).toContain('%~dp0');
+    expect(launcherCmd).toContain('-NoProfile -ExecutionPolicy Bypass');
+    expect(launcherCmd).toContain('scripts\\launch.ps1');
+    expect(launcher).toContain("Join-Path $PSScriptRoot 'start.ps1'");
+    expect(launcher).toContain("$HealthUrl = 'http://localhost:3180/api/health'");
+    expect(launcher).toContain("$ApplicationUrl = 'http://localhost:3180'");
+    expect(launcher).toContain("$Response.service -eq 'inventario-terreno'");
+    expect(launcher).toContain('Inventario Terreno ya está ejecutándose.');
+    expect(launcher).toContain('Start-Process -FilePath $ApplicationUrl');
+    expect(launcher).toContain('-WindowStyle Hidden');
+    expect(launcher).not.toMatch(/npm\.cmd\s+(?:ci|install)|run\s+import|ACTIVOS\.xlsx|inventario\.sqlite/i);
+  });
+
+  test('controlled stop refuses untrusted processes and only closes the recorded process tree', () => {
+    expect(stopCmd).toContain('%~dp0');
+    expect(stopCmd).toContain('-NoProfile -ExecutionPolicy Bypass');
+    expect(stopLauncher).toContain("tmp\\launcher\\server-process.json");
+    expect(stopLauncher).toContain("$State.projectRoot -ne $ProjectRoot");
+    expect(stopLauncher).toContain("$Launcher.StartTime.ToUniversalTime().ToString('o')");
+    expect(stopLauncher).toContain('Get-DescendantProcessIds');
+    expect(stopLauncher).toContain('Get-NetTCPConnection -LocalPort 3180');
+    expect(stopLauncher).toContain('taskkill.exe /PID $LauncherPid /T /F');
+    expect(stopLauncher).toContain('no fue iniciado por este launcher');
+    expect(stopLauncher).not.toMatch(/run\s+import|ACTIVOS\.xlsx|inventario\.sqlite/i);
   });
 
   test('Linux setup and start scripts remain outside the project scope', () => {
