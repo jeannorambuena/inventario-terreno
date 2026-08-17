@@ -39,10 +39,68 @@ Compruebe primero:
 ```powershell
 node --version
 npm.cmd --version
+python --version
 git status --short
 ```
 
 No borre `package-lock.json`. Si `node_modules` está inconsistente y no contiene datos propios, puede eliminarse y volver a ejecutar `npm.cmd ci`.
+
+### Error `gyp ERR! find VS`
+
+Si la salida incluye mensajes similares a:
+
+```text
+gyp ERR! find VS
+gyp ERR! find VS You need to install the latest version of Visual Studio
+gyp ERR! find VS including the "Desktop development with C++" workload.
+```
+
+la instalación de `better-sqlite3` está intentando compilar código nativo y Windows no encuentra un toolchain de Visual C++.
+
+No es un error de la base SQLite ni del repositorio. Tampoco se soluciona con `npm audit fix`.
+
+Instale Visual Studio Build Tools 2022 con la carga **Desktop development with C++**:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e `
+  --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" `
+  --accept-package-agreements `
+  --accept-source-agreements
+```
+
+Después confirme que el componente de compilación x64/x86 está disponible:
+
+```powershell
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+& $vswhere `
+  -products * `
+  -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+  -property installationPath
+```
+
+Una salida válida se parece a:
+
+```text
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
+```
+
+Luego repita:
+
+```powershell
+npm.cmd ci
+```
+
+En una instalación limpia validada de este proyecto sobre Windows y Node.js 24, este procedimiento permitió completar correctamente `npm.cmd ci` y ejecutar las 127 pruebas generales y 37 pruebas móviles.
+
+## Avisos `deprecated` o vulnerabilidades después de `npm.cmd ci`
+
+Los avisos de dependencias transitivas no significan por sí solos que la instalación haya fallado. Si `npm.cmd ci` termina correctamente y las pruebas pasan, no ejecute automáticamente:
+
+```text
+npm audit fix --force
+```
+
+`--force` puede introducir cambios incompatibles o romper la reproducibilidad fijada por `package-lock.json`. Evalúe y actualice dependencias de forma controlada en una rama de desarrollo.
 
 ## Puerto 3180 o 3443 ocupado
 
