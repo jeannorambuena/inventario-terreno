@@ -71,6 +71,35 @@ Una oficina no puede cerrarse normalmente mientras queden bienes pendientes, amb
 
 No requiere Docker, nube, servicios de IA ni conexión a Internet durante la operación normal.
 
+## Requisitos de instalación en Windows
+
+Para reconstruir el proyecto desde GitHub se requiere:
+
+- Windows 10 u 11.
+- Git.
+- Node.js 24.x con npm.
+- PowerShell 5.1 o PowerShell 7.
+- Python 3 disponible para `node-gyp` cuando una dependencia nativa deba compilarse.
+- Visual Studio Build Tools 2022 con **Desktop development with C++** cuando `better-sqlite3` no disponga de un binario precompilado compatible.
+
+En una instalación limpia real de Windows con Node.js 24 se comprobó que `npm.cmd ci` necesitó compilar `better-sqlite3`. El requisito C++ se resolvió con:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e `
+  --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" `
+  --accept-package-agreements `
+  --accept-source-agreements
+```
+
+Para confirmar que el compilador x64/x86 quedó instalado:
+
+```powershell
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+& $vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+```
+
+Consulte [docs/INSTALACION-WINDOWS.md](docs/INSTALACION-WINDOWS.md) y [docs/SOLUCION-PROBLEMAS.md](docs/SOLUCION-PROBLEMAS.md) antes de una instalación nueva.
+
 ## Inicio rápido en Windows
 
 ### 1. Clonar
@@ -93,6 +122,8 @@ cd inventario-terreno
 ```powershell
 npm.cmd ci
 ```
+
+Si aparece `gyp ERR! find VS`, no ejecute `npm audit fix` ni modifique `package-lock.json`: instale los Build Tools C++ indicados arriba y repita `npm.cmd ci`.
 
 ### 3. Ejecutar pruebas
 
@@ -178,78 +209,3 @@ Principio:
 > No abandonar una oficina hasta que el sistema indique que el levantamiento contiene información suficiente para continuar la conciliación sin depender de la memoria.
 
 Guía completa: [docs/OPERACION-TERRENO.md](docs/OPERACION-TERRENO.md).
-
-## Teléfono
-
-El teléfono es un terminal auxiliar. Debe estar en la misma red privada que el notebook.
-
-El servidor genera un enlace temporal asociado a la sesión. Si el teléfono falla, el notebook puede terminar la oficina por sí solo.
-
-Una VPN/WireGuard puede impedir el acceso a la LAN aunque el servidor esté funcionando.
-
-Consulte [docs/PRUEBA-MOVIL.md](docs/PRUEBA-MOVIL.md) y [docs/SOLUCION-PROBLEMAS.md](docs/SOLUCION-PROBLEMAS.md).
-
-## Informes
-
-Con el sistema en ejecución:
-
-```text
-http://localhost:3180/reports
-```
-
-La reportería incluye avance, incidencias, evidencia, resumen ejecutivo, cierre y pendientes de regularización.
-
-La impresión/guardado PDF utiliza la impresión normal del navegador.
-
-## Respaldos
-
-SQLite:
-
-```powershell
-npm.cmd run backup
-```
-
-Cuando existen fotografías, un respaldo operacional completo debe conservar conjuntamente:
-
-```text
-SQLite + evidence/
-```
-
-Consulte [docs/RESPALDO-RESTAURACION.md](docs/RESPALDO-RESTAURACION.md).
-
-## Pruebas y verificación
-
-```powershell
-npm.cmd test
-npm.cmd run test:mobile
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
-```
-
-`verify.ps1` valida herramientas, dependencias, pruebas, base, protección Git, HTTPS y conectividad local/LAN en la configuración operativa completa.
-
-## Estructura
-
-```text
-public/       interfaz notebook, móvil e informes
-src/          servidor, API, SQLite, importación y dominio
-tests/        pruebas con datos sintéticos
-scripts/      preparación, verificación, HTTPS y launchers
-docs/         documentación operativa y técnica
-```
-
-## Documentación
-
-- [Instalación Windows](docs/INSTALACION-WINDOWS.md)
-- [Formato de datos](docs/FORMATO-DATOS.md)
-- [Datos privados](docs/DATOS-PRIVADOS.md)
-- [Operación de terreno](docs/OPERACION-TERRENO.md)
-- [Respaldo y restauración](docs/RESPALDO-RESTAURACION.md)
-- [Solución de problemas](docs/SOLUCION-PROBLEMAS.md)
-- [Handover](docs/HANDOVER.md)
-- [Autoauditoría de terreno](docs/AUTOAUDITORIA-TERRENO.md)
-
-## Reutilización
-
-El proyecto no depende de una municipalidad, oficina o IP específica. Otra organización puede reutilizarlo preparando una planilla compatible y manteniendo la separación entre software y datos privados.
-
-Antes de una utilización institucional, revise sus propias obligaciones de seguridad, protección de datos, inventario y conservación documental.
