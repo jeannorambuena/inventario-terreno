@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <symbol id="inventory" viewBox="0 0 24 24">
+    <path d="M8 5h8M9 3h6a1 1 0 0 1 1 1v3H8V4a1 1 0 0 1 1-1Z"/>
+    <path d="M6 5H5a2 2 0 0 0-2 2v13h18V7a2 2 0 0 0-2-2h-1"/>
+    <path d="m7 13 2.2 2.2L13 11.5M15.5 13H18"/>
+  </symbol>
+  <symbol id="location" viewBox="0 0 24 24">
+    <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/>
+    <circle cx="12" cy="10" r="2.5"/>
+  </symbol>
+  <symbol id="play" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4Z"/>
+  </symbol>
+  <symbol id="phone" viewBox="0 0 24 24">
+    <rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M10 5h4M11 18.5h2"/>
+  </symbol>
+  <symbol id="qr" viewBox="0 0 24 24">
+    <path d="M3 3h7v7H3ZM14 3h7v7h-7ZM3 14h7v7H3ZM15 14h2v2h-2ZM19 14h2v4h-2ZM14 19h4v2h-4ZM20 20h1v1h-1Z"/>
+  </symbol>
+  <symbol id="refresh" viewBox="0 0 24 24">
+    <path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.2 9A7 7 0 0 1 18 7l2 5M4 12l2 5a7 7 0 0 0 11.8-2"/>
+  </symbol>
+  <symbol id="search" viewBox="0 0 24 24">
+    <circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/>
+  </symbol>
+  <symbol id="camera" viewBox="0 0 24 24">
+    <path d="M4 7h4l1.5-2h5L16 7h4v12H4Z"/><circle cx="12" cy="13" r="3.5"/>
+  </symbol>
+  <symbol id="check" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16.5 9"/>
+  </symbol>
+  <symbol id="pending" viewBox="0 0 24 24">
+    <path d="M6 4h12v16H6Z"/><path d="M9 8h6M9 12h6M9 16h3"/>
+  </symbol>
+  <symbol id="edit" viewBox="0 0 24 24">
+    <path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/>
+  </symbol>
+  <symbol id="missing" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9"/><path d="m8.5 8.5 7 7M15.5 8.5l-7 7"/>
+  </symbol>
+  <symbol id="close" viewBox="0 0 24 24">
+    <path d="M5 4h14v16H5Z"/><path d="M9 12h6"/>
+  </symbol>
+  <symbol id="cancel" viewBox="0 0 24 24">
+    <path d="M4 7h16M9 7V4h6v3M7 7l1 14h8l1-14M10 11v6M14 11v6"/>
+  </symbol>
+  <symbol id="connected" viewBox="0 0 24 24">
+    <path d="M5 12.5a10 10 0 0 1 14 0M8 15.5a6 6 0 0 1 8 0"/><circle cx="12" cy="19" r="1"/>
+  </symbol>
+  <symbol id="success" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9"/><path d="m8 12 2.6 2.6L16.5 9"/>
+  </symbol>
+  <symbol id="warning" viewBox="0 0 24 24">
+    <path d="M12 3 2.8 20h18.4Z"/><path d="M12 9v4M12 17h.01"/>
+  </symbol>
+  <symbol id="error" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>
+  </symbol>
+</svg>

@@ -48,9 +48,44 @@ CREATE TABLE IF NOT EXISTS inventory_sessions (
   status_code TEXT NOT NULL DEFAULT 'open',
   started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   completed_at TEXT,
+  cancelled_at TEXT,
+  cancellation_reason TEXT,
+  operator_code TEXT NOT NULL DEFAULT '',
+  device_code TEXT NOT NULL DEFAULT '',
+  closure_confirmed_at TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   FOREIGN KEY (location_id) REFERENCES locations(id)
 );
+
+CREATE TABLE IF NOT EXISTS open_session_locks (
+  location_id INTEGER PRIMARY KEY,
+  inventory_session_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (location_id) REFERENCES locations(id),
+  FOREIGN KEY (inventory_session_id) REFERENCES inventory_sessions(id)
+);
+
+CREATE TRIGGER IF NOT EXISTS prevent_duplicate_open_session_insert
+BEFORE INSERT ON inventory_sessions
+WHEN NEW.status_code = 'open' AND NEW.location_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM inventory_sessions
+    WHERE location_id = NEW.location_id AND status_code = 'open'
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'open session already exists for location');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_duplicate_open_session_update
+BEFORE UPDATE OF status_code, location_id ON inventory_sessions
+WHEN NEW.status_code = 'open' AND NEW.location_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM inventory_sessions
+    WHERE location_id = NEW.location_id AND status_code = 'open' AND id <> NEW.id
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'open session already exists for location');
+END;
 
 CREATE TABLE IF NOT EXISTS observations (
   id INTEGER PRIMARY KEY,
@@ -63,11 +98,78 @@ CREATE TABLE IF NOT EXISTS observations (
   notes TEXT NOT NULL DEFAULT '',
   observed_at TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  version_number INTEGER NOT NULL DEFAULT 1,
+  supersedes_observation_id INTEGER,
+  annulled_at TEXT,
+  operator_code TEXT NOT NULL DEFAULT '',
+  device_code TEXT NOT NULL DEFAULT '',
   CHECK (asset_id IS NOT NULL OR length(trim(provisional_code)) > 0),
   CHECK (status_code IN ('verificado', 'otra_ubicacion', 'no_ubicado', 'desconocido', 'dato_distinto')),
   FOREIGN KEY (inventory_session_id) REFERENCES inventory_sessions(id),
   FOREIGN KEY (asset_id) REFERENCES assets(id),
-  FOREIGN KEY (selected_location_id) REFERENCES locations(id)
+  FOREIGN KEY (selected_location_id) REFERENCES locations(id),
+  FOREIGN KEY (supersedes_observation_id) REFERENCES observations(id)
+);
+
+CREATE TABLE IF NOT EXISTS observation_details (
+  observation_id INTEGER PRIMARY KEY,
+  outcome_code TEXT NOT NULL DEFAULT 'incidence',
+  details_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (observation_id) REFERENCES observations(id)
+);
+
+CREATE TABLE IF NOT EXISTS evidence_files (
+  id INTEGER PRIMARY KEY,
+  evidence_code TEXT NOT NULL UNIQUE,
+  inventory_session_id INTEGER NOT NULL,
+  observation_id INTEGER NOT NULL,
+  evidence_type TEXT NOT NULL,
+  relative_path TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  byte_size INTEGER NOT NULL,
+  sha256 TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  annulled_at TEXT,
+  availability_code TEXT NOT NULL DEFAULT 'available'
+    CHECK (availability_code IN ('available', 'missing', 'invalid')),
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (inventory_session_id) REFERENCES inventory_sessions(id),
+  FOREIGN KEY (observation_id) REFERENCES observations(id)
+);
+
+CREATE TABLE IF NOT EXISTS evidence_exceptions (
+  id INTEGER PRIMARY KEY,
+  inventory_session_id INTEGER NOT NULL,
+  observation_id INTEGER NOT NULL,
+  evidence_type TEXT NOT NULL,
+  reason_code TEXT NOT NULL,
+  operator_code TEXT NOT NULL DEFAULT '',
+  device_code TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  UNIQUE (observation_id, evidence_type),
+  FOREIGN KEY (inventory_session_id) REFERENCES inventory_sessions(id),
+  FOREIGN KEY (observation_id) REFERENCES observations(id)
+);
+
+CREATE TABLE IF NOT EXISTS session_provisional_sequences (
+  inventory_session_id INTEGER PRIMARY KEY,
+  next_value INTEGER NOT NULL DEFAULT 1,
+  FOREIGN KEY (inventory_session_id) REFERENCES inventory_sessions(id)
+);
+
+CREATE TABLE IF NOT EXISTS session_ambiguities (
+  id INTEGER PRIMARY KEY,
+  inventory_session_id INTEGER NOT NULL,
+  lookup_code TEXT NOT NULL,
+  candidate_count INTEGER NOT NULL,
+  resolved_at TEXT,
+  selected_asset_id INTEGER,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  UNIQUE (inventory_session_id, lookup_code),
+  FOREIGN KEY (inventory_session_id) REFERENCES inventory_sessions(id),
+  FOREIGN KEY (selected_asset_id) REFERENCES assets(id)
 );
 
 CREATE TABLE IF NOT EXISTS session_pairings (
@@ -86,6 +188,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
   entity_code TEXT NOT NULL,
   action_code TEXT NOT NULL,
   details_json TEXT,
+  inventory_session_id INTEGER,
+  entity_id INTEGER,
+  operator_code TEXT NOT NULL DEFAULT '',
+  device_code TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
@@ -97,6 +203,20 @@ CREATE INDEX IF NOT EXISTS idx_observations_session_id
 
 CREATE INDEX IF NOT EXISTS idx_observations_asset_id
   ON observations(asset_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_observations_active_session_asset
+  ON observations(inventory_session_id, asset_id)
+  WHERE active = 1 AND asset_id IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_observations_active_session_provisional
+  ON observations(inventory_session_id, provisional_code)
+  WHERE active = 1 AND provisional_code IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_evidence_files_observation
+  ON evidence_files(observation_id, active);
+
+CREATE INDEX IF NOT EXISTS idx_session_ambiguities_open
+  ON session_ambiguities(inventory_session_id, resolved_at);
 
 CREATE INDEX IF NOT EXISTS idx_session_pairings_session_id
   ON session_pairings(inventory_session_id);

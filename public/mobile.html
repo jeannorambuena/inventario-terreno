@@ -3,69 +3,192 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#0d4e31">
+    <meta name="theme-color" content="#34454c">
     <title>Inventario Terreno Móvil</title>
     <link rel="stylesheet" href="/mobile.css">
   </head>
   <body>
-    <header>
-      <div>
-        <p class="eyebrow">Sesión móvil local</p>
-        <h1>Inventario Terreno</h1>
-      </div>
-      <span id="network-state">Conectando…</span>
-    </header>
-    <main>
-      <section class="card session-card">
-        <p id="session-location">Cargando ubicación…</p>
-        <div class="progress-copy">
+    <div class="mobile-shell">
+      <header class="mobile-app-bar">
+        <div class="mobile-identity">
+          <span class="app-mark" aria-hidden="true">
+            <svg class="icon icon--brand"><use href="/icons.svg#inventory"></use></svg>
+          </span>
           <div>
+            <p class="app-kicker">Revisión en terreno</p>
+            <h1>Inventario</h1>
+          </div>
+        </div>
+        <span id="network-state" class="network-chip">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#connected"></use></svg>
+          <span>Conectando…</span>
+        </span>
+      </header>
+
+      <main class="mobile-main">
+        <section class="card session-card" aria-labelledby="mobile-location-title">
+          <div class="session-card__location">
+            <span class="component-icon" aria-hidden="true">
+              <svg class="icon"><use href="/icons.svg#location"></use></svg>
+            </span>
+            <div>
+              <p class="section-kicker">Ubicación seleccionada</p>
+              <p id="session-location" class="session-location" role="heading" aria-level="2">Cargando ubicación…</p>
+            </div>
+          </div>
+          <div class="session-meta-row">
+            <p id="session-state" class="session-state">Sesión abierta</p>
+            <span id="progress-percent" class="mobile-percentage">0%</span>
+          </div>
+          <div class="progress-copy">
             <strong id="progress-label">0 de 0 bienes revisados</strong>
-            <span id="conformance-label">0 bienes conformes</span>
+            <div class="metric-pills">
+              <span id="conformance-label">0 bienes conformes</span>
+              <span id="pending-label">0 pendientes</span>
+            </div>
           </div>
-          <span id="progress-percent">0%</span>
-        </div>
-        <progress id="progress" value="0" max="100">0%</progress>
-      </section>
-      <section class="card">
-        <form id="lookup-form">
-          <label for="code">Código del bien o escáner</label>
-          <div class="input-row">
-            <input id="code" inputmode="numeric" autocomplete="off" required>
-            <button type="submit">Buscar</button>
+          <progress id="progress" value="0" max="100">0%</progress>
+          <p id="conformance-percent" class="conformance-line">0% de conformidad</p>
+        </section>
+
+        <section class="card scan-card" aria-labelledby="scan-title">
+          <div class="card-heading">
+            <span class="component-icon component-icon--accent" aria-hidden="true">
+              <svg class="icon"><use href="/icons.svg#search"></use></svg>
+            </span>
+            <div>
+              <p class="section-kicker">Acción principal</p>
+              <h2 id="scan-title">Código del bien</h2>
+            </div>
           </div>
-        </form>
-        <button id="camera-button" type="button" class="secondary">Usar cámara</button>
-        <p id="camera-message" class="hint"></p>
-        <div id="camera-panel" hidden>
-          <video id="camera-preview" playsinline muted></video>
-          <button id="stop-camera" type="button" class="danger">Detener cámara</button>
-        </div>
-      </section>
-      <section id="result-card" class="card" hidden aria-live="polite">
-        <p id="classification" class="classification"></p>
-        <h2 id="asset-name"></h2>
-        <dl id="asset-details"></dl>
-        <div id="match-choices" class="match-choices"></div>
-        <form id="observation-form">
-          <label>Estado
-            <select id="status" required>
-              <option value="verificado">Verificado</option>
-              <option value="otra_ubicacion">Otra ubicación</option>
-              <option value="no_ubicado">No ubicado</option>
-              <option value="desconocido">Desconocido</option>
-              <option value="dato_distinto">Dato distinto</option>
-            </select>
-          </label>
-          <label>Observación
-            <textarea id="notes" rows="3" maxlength="2000"></textarea>
-          </label>
-          <button type="submit">Registrar</button>
-        </form>
-      </section>
-      <p id="message" role="status" aria-live="polite"></p>
-    </main>
-    <script src="/vendor/zxing-browser.min.js"></script>
+          <form id="lookup-form">
+            <label for="code">Código del bien o escáner</label>
+            <div class="search-composer">
+              <svg class="icon search-composer__icon" aria-hidden="true"><use href="/icons.svg#search"></use></svg>
+              <input id="code" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+              <button type="submit">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"></use></svg>
+                <span>Registrar</span>
+              </button>
+            </div>
+          </form>
+          <button id="incidence-mode" type="button" class="secondary incidence-action" aria-pressed="false">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#warning"></use></svg>
+            <span>Incidencia</span>
+          </button>
+        </section>
+
+        <section id="last-record" class="card last-record" hidden aria-live="polite">
+          <p class="section-kicker">Último registrado</p>
+          <strong id="last-code"></strong>
+          <span id="last-name"></span>
+          <em id="last-result"></em>
+        </section>
+
+        <section id="result-card" class="card asset-card" hidden aria-live="polite">
+          <div class="asset-card__topline">
+            <p id="classification" class="classification"></p>
+            <span class="asset-symbol" aria-hidden="true">
+              <svg class="icon"><use href="/icons.svg#inventory"></use></svg>
+            </span>
+          </div>
+          <h2 id="asset-name"></h2>
+          <dl id="asset-details" class="detail-grid"></dl>
+          <div id="match-choices" class="match-choices"></div>
+          <form id="observation-form" class="observation-form">
+            <div class="form-heading">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#edit"></use></svg>
+              <span>Registrar incidencia</span>
+            </div>
+            <label class="control-field">Estado
+              <select id="status" required>
+                <option value="otra_ubicacion">Otra ubicación</option>
+                <option value="no_ubicado">No ubicado</option>
+                <option value="desconocido">Desconocido</option>
+                <option value="dato_distinto">Dato distinto</option>
+              </select>
+            </label>
+            <details class="incidence-options" open>
+              <summary>Clasificar incidencia</summary>
+              <fieldset>
+                <legend>Estado observado</legend>
+                <label>Etiqueta <select id="mobile-label"><option value="correcta">Correcta</option><option value="deteriorada">Deteriorada</option><option value="ilegible">Ilegible</option><option value="sin_etiqueta">Sin etiqueta</option><option value="posible_duplicada">Posible duplicada</option></select></label>
+                <label>Conservación <select id="mobile-physical"><option value="bueno">Bueno</option><option value="regular">Regular</option><option value="malo">Malo</option><option value="incompleto">Incompleto</option></select></label>
+                <label>Funcionamiento <select id="mobile-functionality"><option value="operativo">Operativo</option><option value="operativo_con_falla">Operativo con falla</option><option value="no_operativo">No operativo</option><option value="no_verificable">No verificable</option></select></label>
+                <label><input id="mobile-disposal" type="checkbox"> Propuesta de baja</label>
+              </fieldset>
+              <fieldset>
+                <legend>Punto físico</legend>
+                <label>Tipo <select id="mobile-point"><option value="">Seleccione…</option><option value="puesto">Puesto / escritorio</option><option value="sala">Sala</option><option value="bodega">Bodega</option><option value="recepcion">Recepción</option><option value="pasillo">Pasillo</option><option value="bano">Baño</option><option value="patio">Patio</option><option value="mueble">Mueble / estante</option><option value="otro">Otro</option></select></label>
+                <label>Referencia <input id="mobile-point-reference" maxlength="60"></label>
+              </fieldset>
+              <fieldset>
+                <legend>Situación</legend>
+                <label><input type="checkbox" name="situation" value="otra_ubicacion"> Encontrado en otra ubicación</label>
+                <label><input type="checkbox" name="situation" value="en_reparacion"> En reparación</label>
+                <label><input type="checkbox" name="situation" value="prestamo_informado"> Préstamo informado</label>
+                <label><input type="checkbox" name="situation" value="traslado_no_regularizado"> Traslado no regularizado</label>
+                <label><input type="checkbox" name="situation" value="bien_tercero"> Bien de tercero / no municipal</label>
+                <label><input type="checkbox" name="situation" value="bien_no_registrado"> Bien no registrado</label>
+                <label><input type="checkbox" name="situation" value="requiere_revision"> Requiere revisión</label>
+              </fieldset>
+              <fieldset id="mobile-provisional-fields" hidden>
+                <legend>Bien adicional</legend>
+                <label>Tipo / descripción * <input id="mobile-provisional-description" maxlength="160"></label>
+                <label>Marca <input id="mobile-provisional-brand" maxlength="80"></label>
+                <label>Modelo <input id="mobile-provisional-model" maxlength="80"></label>
+                <label>Serie <input id="mobile-provisional-serial" maxlength="120"></label>
+                <label><input id="mobile-pending-identification" type="checkbox"> Pendiente de identificar</label>
+              </fieldset>
+              <fieldset id="mobile-discrepancy-fields" hidden>
+                <legend>Dato que no coincide</legend>
+                <label>Campo <select id="mobile-discrepancy-field"><option value="description">Descripción</option><option value="brand">Marca</option><option value="model">Modelo</option><option value="serialNumber">Serie</option><option value="assetType">Tipo de bien</option><option value="otherIdentifier">Otro identificador</option></select></label>
+                <label>Valor observado <input id="mobile-discrepancy-value" maxlength="250"></label>
+                <label><input id="mobile-discrepancy-evidence" type="checkbox"> Leer desde evidencia Serie/modelo</label>
+              </fieldset>
+              <fieldset id="mobile-extra-fields">
+                <legend>Detalle cuando corresponda</legend>
+                <label>Componente faltante <select id="mobile-incomplete-part"><option value="">No corresponde</option><option value="fuente_cargador">Fuente/cargador</option><option value="cable">Cable</option><option value="tapa">Tapa</option><option value="bandeja">Bandeja</option><option value="accesorio">Accesorio</option><option value="componente">Componente</option><option value="otro">Otro</option></select></label>
+                <label>Motivo de revisión <select id="mobile-review-reason"><option value="">No corresponde</option><option value="identificacion">Identificación</option><option value="propiedad">Propiedad/procedencia</option><option value="ubicacion">Ubicación</option><option value="descripcion">Descripción</option><option value="serie_modelo">Serie/modelo</option><option value="estado_fisico">Estado físico</option><option value="documentacion">Documentación</option><option value="otro">Otro</option></select></label>
+                <label>Destino/unidad/persona <input id="mobile-custody-destination" maxlength="120"></label>
+                <label>Referencia documental <input id="mobile-custody-reference" maxlength="100"></label>
+                <label>Base <select id="mobile-custody-basis"><option value="">No corresponde</option><option value="informado">Informado, no verificado</option><option value="verificado">Verificado</option></select></label>
+              </fieldset>
+            </details>
+            <fieldset class="evidence-fieldset">
+              <legend>Evidencia fotográfica</legend>
+              <p>Puede agregar varias fotos, una o más del mismo tipo.</p>
+              <div class="evidence-types">
+                <label><input type="radio" name="evidence-type" value="bien_completo"> Bien completo</label>
+                <label><input type="radio" name="evidence-type" value="etiqueta_patrimonial"> Etiqueta patrimonial</label>
+                <label><input type="radio" name="evidence-type" value="serie_modelo"> Serie / modelo</label>
+                <label><input type="radio" name="evidence-type" value="dano"> Daño</label>
+                <label><input type="radio" name="evidence-type" value="ubicacion"> Ubicación</label>
+              </div>
+              <button id="add-evidence" type="button" class="secondary">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#camera"></use></svg>
+                <span>Agregar foto</span>
+              </button>
+              <input id="evidence-file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple hidden>
+              <div id="mobile-evidence-queue" class="evidence-queue"></div>
+              <p id="evidence-status" class="evidence-status" aria-live="polite"></p>
+            </fieldset>
+            <div class="mobile-action-bar">
+              <button type="submit">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"></use></svg>
+                <span>Guardar incidencia</span>
+              </button>
+              <button id="cancel-incidence" type="button" class="secondary">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#close"></use></svg>
+                <span>Cancelar</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <p id="message" class="app-alert" role="status" aria-live="polite"></p>
+      </main>
+    </div>
     <script type="module" src="/mobile.js"></script>
   </body>
 </html>

@@ -3,115 +3,503 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#34454c">
     <title>Inventario Terreno</title>
     <link rel="stylesheet" href="/styles.css">
   </head>
   <body>
-    <header class="app-header">
-      <div>
-        <p class="eyebrow">Aplicación local</p>
-        <h1>Inventario Terreno</h1>
-      </div>
-      <span id="connection-status" class="status-pill">Verificando servicio…</span>
-    </header>
-
-    <main>
-      <section class="panel" aria-labelledby="location-title">
-        <div class="section-heading">
-          <div>
-            <p class="step">Paso 1</p>
-            <h2 id="location-title">Seleccionar ubicación</h2>
-          </div>
-          <button id="start-session" type="button" disabled>Iniciar sesión</button>
-        </div>
-        <div class="location-grid">
-          <label>Dirección
-            <select id="direction"><option value="">Seleccione…</option></select>
-          </label>
-          <label>Departamento
-            <select id="department" disabled><option value="">Seleccione…</option></select>
-          </label>
-          <label>Sección
-            <select id="section" disabled><option value="">Seleccione…</option></select>
-          </label>
-        </div>
-      </section>
-
-      <section id="work-panel" class="panel" aria-labelledby="work-title" hidden>
-        <div class="section-heading">
-          <div>
-            <p class="step">Paso 2</p>
-            <h2 id="work-title">Registrar inventario</h2>
-          </div>
-          <button id="close-session" type="button" class="secondary">Cerrar sesión</button>
-        </div>
-
-        <aside id="pairing-panel" class="pairing-panel" hidden>
-          <div>
-            <p class="eyebrow">Conexión Samsung</p>
-            <h3>Escanee para abrir esta sesión</h3>
-            <a id="mobile-url" href="#" target="_blank" rel="noreferrer"></a>
-            <p id="pairing-expiry" class="muted"></p>
-            <button id="refresh-pairing" type="button" class="secondary">Renovar enlace</button>
-          </div>
-          <img id="pairing-qr" alt="Código QR para abrir la sesión en el teléfono">
-        </aside>
-
-        <div class="progress-block" aria-live="polite">
-          <div class="progress-copy">
+    <div class="app-shell">
+      <header class="app-bar">
+        <div class="app-bar__inner">
+          <div class="app-identity">
+            <span class="app-mark" aria-hidden="true">
+              <svg class="icon icon--brand"><use href="/icons.svg#inventory"></use></svg>
+            </span>
             <div>
-              <strong id="progress-label">0 de 0 bienes revisados</strong>
-              <span id="conformance-label" class="muted">0 bienes conformes</span>
+              <p class="app-kicker">Operación local</p>
+              <h1>Inventario Terreno</h1>
             </div>
-            <span id="progress-percent">0%</span>
           </div>
-          <progress id="progress" value="0" max="100">0%</progress>
+          <div class="app-bar-actions">
+            <a class="app-bar-link" href="/reports">Informes y avance</a>
+            <span class="status-chip status-chip--service">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#connected"></use></svg>
+              <span id="connection-status">Verificando servicio…</span>
+            </span>
+          </div>
         </div>
+      </header>
 
-        <form id="lookup-form" class="lookup-form">
-          <label for="lookup-code">Código del bien o escáner</label>
-          <div class="input-action">
-            <input id="lookup-code" name="code" type="text" inputmode="numeric" autocomplete="off" required>
-            <button type="submit">Buscar</button>
+      <main class="app-main">
+        <nav class="workflow-stepper" aria-label="Etapas del inventario">
+          <ol>
+            <li class="workflow-step workflow-step--location">
+              <span class="workflow-step__number">1</span>
+              <span><strong>Ubicación</strong><small>Definir área</small></span>
+            </li>
+            <li class="workflow-step workflow-step--inventory">
+              <span class="workflow-step__number">2</span>
+              <span><strong>Inventario</strong><small>Revisar bienes</small></span>
+            </li>
+            <li class="workflow-step workflow-step--summary">
+              <span class="workflow-step__number">3</span>
+              <span><strong>Resumen</strong><small>Cerrar jornada</small></span>
+            </li>
+          </ol>
+        </nav>
+
+        <section class="location-card" aria-labelledby="location-title">
+          <div class="component-heading">
+            <div class="component-heading__identity">
+              <span class="component-icon" aria-hidden="true">
+                <svg class="icon"><use href="/icons.svg#location"></use></svg>
+              </span>
+              <div>
+                <p class="section-kicker">Etapa 1</p>
+                <h2 id="location-title">Seleccionar ubicación</h2>
+                <p class="component-description">Defina el área administrativa que se revisará.</p>
+              </div>
+            </div>
+            <button id="start-session" type="button" disabled>
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#play"></use></svg>
+              <span>Iniciar sesión</span>
+            </button>
           </div>
-        </form>
 
-        <details id="pending-panel" class="pending-panel">
-          <summary>Bienes pendientes de revisión (<span id="pending-count">0</span>)</summary>
-          <div id="pending-assets" class="pending-assets"></div>
-        </details>
+          <div class="location-grid">
+            <label>Dirección
+              <select id="direction"><option value="">Seleccione…</option></select>
+            </label>
+            <label>Departamento
+              <select id="department" disabled><option value="">Seleccione…</option></select>
+            </label>
+            <label>Sección
+              <select id="section" disabled><option value="">Seleccione…</option></select>
+            </label>
+            <label>Operador
+              <input id="operator-code" type="text" maxlength="80" autocomplete="name" placeholder="Nombre o identificador corto" value="OPERADOR">
+            </label>
+          </div>
 
-        <article id="asset-result" class="asset-card" hidden aria-live="polite">
-          <p class="eyebrow" id="asset-result-label">Resultado</p>
-          <h3 id="asset-name"></h3>
-          <dl id="asset-details"></dl>
-        </article>
+          <div id="resume-panel" class="resume-panel" hidden>
+            <div class="inline-heading">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>
+              <p>Sesiones abiertas para esta ubicación</p>
+            </div>
+            <div id="resume-sessions" class="resume-actions"></div>
+          </div>
+        </section>
 
-        <form id="observation-form" class="observation-form" hidden>
-          <label>Estado
-            <select id="observation-status" required>
-              <option value="verificado">Verificado</option>
-              <option value="otra_ubicacion">Otra ubicación</option>
-              <option value="no_ubicado">No ubicado</option>
-              <option value="desconocido">Desconocido</option>
-              <option value="dato_distinto">Dato distinto</option>
-            </select>
+        <section id="work-panel" class="workspace-shell" aria-labelledby="work-title" hidden>
+          <header class="workspace-header">
+            <div>
+              <p class="section-kicker">Etapa 2</p>
+              <h2 id="work-title">Revisión de inventario</h2>
+              <p id="active-location" class="active-location">Ubicación actual</p>
+            </div>
+            <span class="status-chip status-chip--active">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#connected"></use></svg>
+              Sesión activa
+            </span>
+          </header>
+
+          <div class="workspace-grid">
+            <div class="workspace-primary">
+              <section class="operation-card search-card" aria-labelledby="search-title">
+                <div class="operation-card__header">
+                  <span class="component-icon component-icon--accent" aria-hidden="true">
+                    <svg class="icon"><use href="/icons.svg#search"></use></svg>
+                  </span>
+                  <div>
+                    <h3 id="search-title">Código del bien</h3>
+                    <p>Ingrese el código y presione Enter. Una coincidencia correcta se registra inmediatamente.</p>
+                  </div>
+                </div>
+                <form id="lookup-form" class="lookup-form">
+                  <label for="lookup-code">Código del bien o escáner</label>
+                  <div class="search-composer">
+                    <svg class="icon search-composer__icon" aria-hidden="true"><use href="/icons.svg#search"></use></svg>
+                    <input id="lookup-code" name="code" type="text" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" required autofocus>
+                    <button type="submit">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"></use></svg>
+                      <span>Registrar</span>
+                    </button>
+                  </div>
+                </form>
+                <button id="incidence-mode" type="button" class="secondary incidence-mode" aria-pressed="false">
+                  <svg class="icon" aria-hidden="true"><use href="/icons.svg#warning"></use></svg>
+                  <span>Incidencia</span>
+                </button>
+              </section>
+
+              <section class="field-metrics" aria-label="Métricas de la oficina">
+                <article><span>Esperados</span><strong id="metric-expected">0</strong></article>
+                <article><span>Encontrados</span><strong id="metric-found">0</strong></article>
+                <article><span>Pendientes</span><strong id="metric-pending">0</strong></article>
+                <article><span>Incidencias</span><strong id="metric-incidents">0</strong></article>
+              </section>
+
+              <article id="last-record" class="last-record" hidden aria-live="polite">
+                <p class="section-kicker">Último registrado</p>
+                <div class="last-record__row">
+                  <div class="last-record__content">
+                    <strong id="last-code"></strong>
+                    <span id="last-name"></span>
+                    <em id="last-result"></em>
+                  </div>
+                  <button id="undo-last" type="button" class="secondary secondary--warning" hidden>
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>
+                    <span>Deshacer último registro</span>
+                  </button>
+                </div>
+              </article>
+
+              <article id="asset-result" class="asset-card" hidden aria-live="polite">
+                <div class="asset-card__heading">
+                  <span class="component-icon" aria-hidden="true">
+                    <svg class="icon"><use href="/icons.svg#inventory"></use></svg>
+                  </span>
+                  <div>
+                    <p class="section-kicker" id="asset-result-label">Resultado</p>
+                    <h3 id="asset-name"></h3>
+                  </div>
+                </div>
+                <dl id="asset-details" class="detail-grid"></dl>
+              </article>
+
+              <form id="observation-form" class="observation-form operation-card" hidden>
+                <div class="operation-card__header operation-card__header--compact">
+                  <span class="component-icon" aria-hidden="true">
+                    <svg class="icon"><use href="/icons.svg#edit"></use></svg>
+                  </span>
+                  <div>
+                    <h3>Registrar incidencia</h3>
+                    <p>Complete solo las dimensiones que correspondan.</p>
+                  </div>
+                </div>
+                <div class="observation-grid observation-grid--single">
+                  <label class="control-field">Estado
+                    <select id="observation-status" required>
+                      <option value="otra_ubicacion">Otra ubicación</option>
+                      <option value="no_ubicado">No ubicado</option>
+                      <option value="desconocido">Desconocido</option>
+                      <option value="dato_distinto">Dato distinto</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="incidence-dimensions incidence-dimensions--structured">
+                  <fieldset>
+                    <legend>Estado observado</legend>
+                    <label>Etiqueta
+                      <select id="label-condition">
+                        <option value="correcta">Correcta</option>
+                        <option value="deteriorada">Deteriorada</option>
+                        <option value="ilegible">Ilegible</option>
+                        <option value="sin_etiqueta">Sin etiqueta</option>
+                        <option value="posible_duplicada">Posible duplicada</option>
+                      </select>
+                    </label>
+                    <label>Conservación
+                      <select id="physical-condition">
+                        <option value="bueno">Bueno</option>
+                        <option value="regular">Regular</option>
+                        <option value="malo">Malo</option>
+                        <option value="incompleto">Incompleto</option>
+                      </select>
+                    </label>
+                    <label>Funcionamiento
+                      <select id="functionality">
+                        <option value="operativo">Operativo</option>
+                        <option value="operativo_con_falla">Operativo con falla</option>
+                        <option value="no_operativo">No operativo</option>
+                        <option value="no_verificable">No verificable</option>
+                      </select>
+                    </label>
+                    <label><input id="proposed-disposal" type="checkbox"> Propuesta de baja</label>
+                  </fieldset>
+                  <fieldset>
+                    <legend>Situación</legend>
+                    <label><input type="checkbox" name="situation" value="otra_ubicacion"> Encontrado en otra ubicación</label>
+                    <label><input type="checkbox" name="situation" value="en_reparacion"> En reparación</label>
+                    <label><input type="checkbox" name="situation" value="prestamo_informado"> Préstamo informado</label>
+                    <label><input type="checkbox" name="situation" value="traslado_no_regularizado"> Traslado no regularizado</label>
+                    <label><input type="checkbox" name="situation" value="bien_tercero"> Bien de tercero / no municipal</label>
+                    <label><input type="checkbox" name="situation" value="bien_no_registrado"> Bien no registrado</label>
+                    <label><input type="checkbox" name="situation" value="requiere_revision"> Requiere revisión</label>
+                  </fieldset>
+                </div>
+                <div id="structured-details" class="structured-details">
+                  <fieldset id="physical-point-fields">
+                    <legend>Punto físico observado</legend>
+                    <label>Tipo
+                      <select id="physical-point-type">
+                        <option value="">Seleccione…</option><option value="puesto">Puesto / escritorio</option>
+                        <option value="sala">Sala</option><option value="bodega">Bodega</option>
+                        <option value="recepcion">Recepción</option><option value="pasillo">Pasillo</option>
+                        <option value="bano">Baño</option><option value="patio">Patio</option>
+                        <option value="mueble">Mueble / estante</option><option value="otro">Otro</option>
+                      </select>
+                    </label>
+                    <label>Referencia breve <input id="physical-point-reference" maxlength="60" placeholder="Máximo 60 caracteres"></label>
+                  </fieldset>
+                  <fieldset id="provisional-fields" hidden>
+                    <legend>Bien adicional</legend>
+                    <label>Tipo / descripción * <input id="provisional-description" maxlength="160"></label>
+                    <label>Marca observada <input id="provisional-brand" maxlength="80"></label>
+                    <label>Modelo observado <input id="provisional-model" maxlength="80"></label>
+                    <label>Serie observada <input id="provisional-serial" maxlength="120"></label>
+                    <label>Código visible <input id="provisional-observed-code" maxlength="120"></label>
+                    <label><input id="provisional-pending" type="checkbox"> Pendiente de identificar</label>
+                  </fieldset>
+                  <fieldset id="discrepancy-fields" hidden>
+                    <legend>Dato que no coincide</legend>
+                    <label>Campo
+                      <select id="discrepancy-field"><option value="description">Descripción</option><option value="brand">Marca</option><option value="model">Modelo</option><option value="serialNumber">Serie</option><option value="assetType">Tipo de bien</option><option value="otherIdentifier">Otro identificador</option></select>
+                    </label>
+                    <label>Valor maestro <input id="discrepancy-master" maxlength="250" readonly></label>
+                    <label>Valor observado <input id="discrepancy-observed" maxlength="250"></label>
+                    <label><input id="discrepancy-from-evidence" type="checkbox"> Leer posteriormente desde evidencia Serie / modelo</label>
+                  </fieldset>
+                  <fieldset id="incomplete-fields" hidden>
+                    <legend>Componente faltante</legend>
+                    <div class="quick-options">
+                      <label><input type="checkbox" name="incomplete-part" value="fuente_cargador"> Fuente/cargador</label><label><input type="checkbox" name="incomplete-part" value="cable"> Cable</label><label><input type="checkbox" name="incomplete-part" value="tapa"> Tapa</label><label><input type="checkbox" name="incomplete-part" value="bandeja"> Bandeja</label><label><input type="checkbox" name="incomplete-part" value="accesorio"> Accesorio</label><label><input type="checkbox" name="incomplete-part" value="componente"> Componente</label><label><input type="checkbox" name="incomplete-part" value="otro"> Otro</label>
+                    </div>
+                    <label>Otro componente <input id="incomplete-other" maxlength="80"></label>
+                  </fieldset>
+                  <fieldset id="review-fields" hidden>
+                    <legend>Qué debe revisarse</legend>
+                    <label>Motivo <select id="review-reason"><option value="">Seleccione…</option><option value="identificacion">Identificación</option><option value="propiedad">Propiedad/procedencia</option><option value="ubicacion">Ubicación</option><option value="descripcion">Descripción</option><option value="serie_modelo">Serie/modelo</option><option value="estado_fisico">Estado físico</option><option value="documentacion">Documentación</option><option value="otro">Otro</option></select></label>
+                    <label>Detalle breve <input id="review-detail" maxlength="120"></label>
+                  </fieldset>
+                  <fieldset id="custody-fields" hidden>
+                    <legend>Reparación / préstamo / traslado</legend>
+                    <label>Destino, unidad o persona informada <input id="custody-destination" maxlength="120"></label>
+                    <label>Referencia documental, si existe <input id="custody-reference" maxlength="100"></label>
+                    <label>Base <select id="custody-basis"><option value="">Seleccione…</option><option value="informado">Informado, no verificado</option><option value="verificado">Verificado</option></select></label>
+                  </fieldset>
+                </div>
+                <fieldset class="evidence-fieldset">
+                  <legend>Evidencia fotográfica</legend>
+                  <p>Puede preparar varias fotos. Permanecen sólo en el equipo local.</p>
+                  <div class="evidence-types">
+                    <label><input type="radio" name="evidence-type" value="bien_completo"> Bien completo</label>
+                    <label><input type="radio" name="evidence-type" value="etiqueta_patrimonial"> Etiqueta patrimonial</label>
+                    <label><input type="radio" name="evidence-type" value="serie_modelo"> Serie / modelo</label>
+                    <label><input type="radio" name="evidence-type" value="dano"> Daño</label>
+                    <label><input type="radio" name="evidence-type" value="ubicacion"> Ubicación</label>
+                  </div>
+                  <button id="add-evidence" type="button" class="secondary">
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#camera"></use></svg>
+                    <span>Agregar foto</span>
+                  </button>
+                  <input id="evidence-file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple hidden>
+                  <div id="evidence-queue" class="evidence-queue"></div>
+                  <p id="evidence-status" class="evidence-status" aria-live="polite"></p>
+                </fieldset>
+                <div class="form-action-bar">
+                  <button type="submit">
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"></use></svg>
+                    <span>Guardar incidencia</span>
+                  </button>
+                  <button id="cancel-incidence" type="button" class="secondary">
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#close"></use></svg>
+                    <span>Cancelar</span>
+                  </button>
+                </div>
+              </form>
+
+              <details id="pending-panel" class="pending-panel">
+                <summary>
+                  <span class="summary-label">
+                    <svg class="icon" aria-hidden="true"><use href="/icons.svg#pending"></use></svg>
+                    Bienes pendientes / no encontrados en terreno
+                  </span>
+                  <span class="count-badge" id="pending-count">0</span>
+                </summary>
+                <div id="pending-assets" class="pending-assets"></div>
+              </details>
+              <details id="records-panel" class="pending-panel">
+                <summary><span class="summary-label"><svg class="icon" aria-hidden="true"><use href="/icons.svg#edit"></use></svg>Registros de esta sesión</span></summary>
+                <div id="session-records" class="pending-assets"></div>
+              </details>
+            </div>
+
+            <aside class="workspace-sidebar" aria-label="Estado y conexión de la sesión">
+              <section class="side-card progress-card" aria-labelledby="progress-card-title">
+                <div class="side-card__heading">
+                  <div>
+                    <p class="section-kicker">Estado actual</p>
+                    <h3 id="progress-card-title">Avance de la sesión</h3>
+                  </div>
+                  <span id="progress-percent" class="metric-ring">0%</span>
+                </div>
+                <div class="progress-copy" aria-live="polite">
+                  <strong id="progress-label">0 de 0 bienes revisados</strong>
+                  <span id="conformance-label">0 bienes conformes</span>
+                </div>
+                <progress id="progress" value="0" max="100">0%</progress>
+                <div class="progress-legend">
+                  <span><i class="legend-dot legend-dot--reviewed"></i>Revisión</span>
+                  <span><i class="legend-dot legend-dot--conforming"></i>Conformidad</span>
+                </div>
+              </section>
+
+              <section class="side-card mobile-control-card">
+                <div class="side-card__heading">
+                  <span class="component-icon" aria-hidden="true">
+                    <svg class="icon"><use href="/icons.svg#phone"></use></svg>
+                  </span>
+                  <div>
+                    <p class="section-kicker">Dispositivo de terreno</p>
+                    <h3>Conexión móvil</h3>
+                  </div>
+                </div>
+                <p class="side-card__copy">Vincule el teléfono a esta sesión mediante un enlace temporal.</p>
+                <button id="generate-pairing" type="button">
+                  <svg class="icon" aria-hidden="true"><use href="/icons.svg#phone"></use></svg>
+                  <span>Generar enlace móvil</span>
+                </button>
+
+                <div id="pairing-panel" class="pairing-panel" hidden>
+                  <div class="qr-frame">
+                    <img id="pairing-qr" alt="Código QR para abrir la sesión en el teléfono">
+                  </div>
+                  <div class="pairing-copy">
+                    <p class="pairing-title">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#qr"></use></svg>
+                      Escanee el código QR
+                    </p>
+                    <a id="mobile-url" href="#" target="_blank" rel="noreferrer">Abrir sesión móvil</a>
+                    <p id="pairing-expiry" class="muted"></p>
+                    <button id="refresh-pairing" type="button" class="secondary">
+                      <svg class="icon" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>
+                      <span>Renovar enlace</span>
+                    </button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="side-card session-actions-card">
+                <h3>Control de sesión</h3>
+                <p class="side-card__copy">El sistema comprobará que no quede información de terreno pendiente.</p>
+                <button id="close-session" type="button" class="secondary secondary--warning">
+                  <svg class="icon" aria-hidden="true"><use href="/icons.svg#close"></use></svg>
+                  <span>¿Puedo salir de esta oficina?</span>
+                </button>
+              </section>
+            </aside>
+          </div>
+        </section>
+
+        <section id="closure-panel" class="summary-card closure-panel" hidden aria-labelledby="closure-title">
+          <div class="summary-card__heading">
+            <span class="component-icon component-icon--accent" aria-hidden="true"><svg class="icon"><use href="/icons.svg#warning"></use></svg></span>
+            <div><p class="section-kicker">Revisión antes de salir</p><h2 id="closure-title">¿Puedo salir de esta oficina?</h2></div>
+          </div>
+          <p id="closure-state" class="closure-state"></p>
+          <dl id="closure-metrics" class="summary-grid"></dl>
+          <div id="closure-blockers" class="closure-blockers"></div>
+          <label id="closure-confirm-label" class="closure-confirm" hidden>
+            <input id="closure-confirm" type="checkbox">
+            Confirmo que completé el levantamiento físico y que las situaciones administrativas quedaron suficientemente documentadas.
           </label>
-          <label>Observación
-            <textarea id="observation-notes" maxlength="2000" rows="3"></textarea>
-          </label>
-          <button type="submit">Registrar observación</button>
-        </form>
-      </section>
+          <div class="form-action-bar">
+            <button id="finalize-session" type="button" disabled>Finalizar revisión de esta oficina</button>
+            <button id="dismiss-closure" type="button" class="secondary">Volver a la revisión</button>
+          </div>
+        </section>
 
-      <section id="summary-panel" class="panel" hidden aria-labelledby="summary-title">
-        <p class="step">Sesión finalizada</p>
-        <h2 id="summary-title">Resumen</h2>
-        <dl id="summary-details" class="summary-grid"></dl>
-      </section>
+        <section id="summary-panel" class="summary-card" hidden aria-labelledby="summary-title">
+          <div class="summary-card__heading">
+            <span class="component-icon component-icon--success" aria-hidden="true">
+              <svg class="icon"><use href="/icons.svg#success"></use></svg>
+            </span>
+            <div>
+              <p class="section-kicker">Etapa 3 · Sesión finalizada</p>
+              <h2 id="summary-title">Resumen de inventario</h2>
+            </div>
+          </div>
+          <dl id="summary-details" class="summary-grid"></dl>
+          <a id="summary-report-link" class="summary-report-link" href="/reports">Ver informe de cierre e incidencias</a>
+        </section>
 
-      <p id="message" class="message" role="status" aria-live="polite"></p>
-    </main>
+        <p id="message" class="app-alert" role="status" aria-live="polite"></p>
+      </main>
+    </div>
+
+    <dialog id="cancel-dialog">
+      <form id="cancel-form" method="dialog" class="cancel-form">
+        <div class="dialog-heading">
+          <span class="component-icon component-icon--danger" aria-hidden="true">
+            <svg class="icon"><use href="/icons.svg#cancel"></use></svg>
+          </span>
+          <div>
+            <p class="section-kicker">Acción irreversible</p>
+            <h2>Cancelar sesión de prueba</h2>
+          </div>
+        </div>
+        <dl id="cancel-details" class="summary-grid"></dl>
+        <p class="app-alert error">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#warning"></use></svg>
+          <span>La cancelación es permanente. La sesión conservará sus observaciones y no podrá reabrirse.</span>
+        </p>
+        <label>Motivo obligatorio
+          <textarea id="cancel-reason" minlength="3" maxlength="1000" required></textarea>
+        </label>
+        <label class="confirmation-check">
+          <input id="cancel-confirm" type="checkbox" required>
+          <span>Confirmo expresamente que deseo cancelar esta sesión de prueba.</span>
+        </label>
+        <div class="dialog-actions">
+          <button id="confirm-cancel" type="submit" class="danger">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#cancel"></use></svg>
+            <span>Confirmar cancelación</span>
+          </button>
+          <button id="dismiss-cancel" type="button" class="secondary">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#close"></use></svg>
+            <span>Volver sin cancelar</span>
+          </button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="undo-dialog">
+      <form id="undo-form" method="dialog" class="cancel-form">
+        <div class="dialog-heading">
+          <span class="component-icon component-icon--accent" aria-hidden="true">
+            <svg class="icon"><use href="/icons.svg#refresh"></use></svg>
+          </span>
+          <div>
+            <p class="section-kicker">Reversión con trazabilidad</p>
+            <h2>Deshacer último registro</h2>
+          </div>
+        </div>
+        <p>Se quitará de la revisión únicamente el siguiente registro:</p>
+        <dl id="undo-details" class="summary-grid"></dl>
+        <p class="app-alert error">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#warning"></use></svg>
+          <span>Si otro dispositivo registró algo después, la operación será rechazada sin borrar datos.</span>
+        </p>
+        <label>Motivo obligatorio
+          <textarea id="undo-reason" minlength="3" maxlength="1000" required></textarea>
+        </label>
+        <label class="confirmation-check">
+          <input id="undo-confirm" type="checkbox" required>
+          <span>Confirmo que este es el registro que deseo deshacer.</span>
+        </label>
+        <div class="dialog-actions">
+          <button id="confirm-undo" type="submit" class="danger">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>
+            <span>Deshacer registro</span>
+          </button>
+          <button id="dismiss-undo" type="button" class="secondary">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#close"></use></svg>
+            <span>Volver sin cambios</span>
+          </button>
+        </div>
+      </form>
+    </dialog>
 
     <script type="module" src="/app.js"></script>
   </body>

@@ -1,87 +1,185 @@
 # Reglas del proyecto Inventario Terreno
 
-Estas instrucciones se aplican a todo el repositorio y deben leerse antes de operar un clon nuevo.
+Estas instrucciones se aplican a todo el repositorio y deben leerse antes de modificar, instalar u operar una copia.
 
-## Propósito y arquitectura
+## Propósito
 
-Inventario Terreno es una aplicación local y offline para Windows. Un notebook ejecuta Node.js/Express y guarda la copia de trabajo en SQLite; la interfaz web del notebook y un teléfono conectado a la misma red privada consumen la API local. ExcelJS lee `imports/ACTIVOS.xlsx` como fuente protegida de solo lectura.
+Inventario Terreno es una aplicación local para Windows que permite comparar una base maestra con la realidad física observada durante una visita de terreno.
 
-- `src/`: servidor Express, API, base SQLite, importación y utilidades de red.
-- `public/`: interfaz del notebook y vista móvil, sin datos reales incorporados.
-- `tests/`: pruebas Vitest/Supertest con datos completamente sintéticos.
-- `docs/`: instalación, traspaso, operación y decisiones del proyecto.
-- `scripts/`: instalación, verificación y arranque seguros para PowerShell.
-- `imports/`: planillas privadas locales; nunca se versionan.
-- `data/`: SQLite privada local; nunca se versiona ni se sobrescribe.
-- `backups/`: respaldos privados locales; nunca se versionan.
+El flujo conceptual es:
 
-La tecnología aprobada es HTML, CSS, JavaScript ES Modules, Node.js 24, Express, SQLite y ExcelJS. El MVP no usa Docker, PHP, Java, servicios en la nube, telemetría ni APIs de inteligencia artificial.
-
-## Requisitos del equipo
-
-- Git.
-- GitHub CLI (`gh`) autenticado cuando se necesite clonar o publicar.
-- Node.js 24.x y npm incluido.
-- Windows PowerShell 5.1 o PowerShell 7.
-- En PowerShell usar `npm.cmd` y `npx.cmd`, especialmente si la política bloquea `npm.ps1` o `npx.ps1`.
-
-No reinstalar herramientas que ya cumplen la versión requerida. Si falta una herramienta, informar el bloqueo y solicitar su instalación; no descargar ejecutables de fuentes improvisadas.
-
-## Instalación y operación
-
-Desde la raíz del repositorio:
-
-```powershell
-# El modo debe elegirse expresamente; sin modo el script se detiene.
-.\scripts\setup.ps1 -Mode NUEVO
-.\scripts\setup.ps1 -Mode RESTAURAR
-
-# Verificación integral.
-.\scripts\verify.ps1
-
-# Dependencias reproducibles y pruebas (también ejecutadas por setup).
-npm.cmd ci
-npm.cmd test
-npm.cmd run test:mobile
-
-# Respaldo consistente de la base actual.
-npm.cmd run backup
-
-# Servidor activo en primer plano.
-.\scripts\start.ps1
+```text
+MAESTRO
+→ VISITA
+→ REALIDAD FÍSICA
+→ INCIDENCIAS + EVIDENCIA
+→ CONCILIACIÓN
+→ REGULARIZACIÓN
 ```
 
-`start.ps1` no importa datos. Debe comprobar que el puerto `3180` esté libre, iniciar el servicio en `0.0.0.0:3180`, mostrar `http://localhost:3180` y las URLs de la LAN, y dejar el proceso activo.
+El sistema nunca modifica automáticamente el maestro.
 
-Antes de iniciar operación real, ejecutar las pruebas generales y móviles. Después verificar HTTP `200` tanto en localhost como en una IPv4 privada del notebook. No configurar redirección de puertos ni exponer el servicio a Internet.
+## Arquitectura
+
+- `src/`: servidor Express, API, dominio, SQLite, importación y reportería.
+- `public/`: interfaz notebook, móvil e informes.
+- `tests/`: pruebas Vitest/Supertest con datos sintéticos.
+- `docs/`: instalación, operación, respaldo y handover.
+- `scripts/`: PowerShell para preparación, verificación, HTTPS y launchers.
+- `imports/`: planillas privadas locales; nunca se versionan.
+- `data/`: SQLite privada local; nunca se versiona.
+- `backups/`: respaldos privados; nunca se versionan.
+- `evidence/`: fotografías/evidencias; nunca se versionan.
+- `exports/`: salidas operacionales; nunca se versionan.
+- `local-certs/`: certificados y claves HTTPS locales; nunca se versionan.
+
+## Tecnología aprobada
+
+- Windows 10/11.
+- Node.js 24.x.
+- JavaScript ES Modules.
+- Express.
+- SQLite con `better-sqlite3`.
+- ExcelJS.
+- HTML/CSS/JavaScript sin framework frontend complejo.
+- PowerShell para scripts operativos.
+
+No introducir Docker, nube, IA, OCR, ZXing, BarcodeDetector, GPS, WebSockets u offline complejo sin una necesidad operacional demostrada.
+
+## Flujo operativo vigente
+
+El caso normal debe seguir siendo:
+
+```text
+CÓDIGO → Enter → registrado → siguiente
+```
+
+No agregar formularios al flujo correcto.
+
+La cámara del teléfono se utiliza sólo para evidencia fotográfica tipificada. No existe lectura operativa de códigos por cámara.
+
+## Cierre de oficina
+
+El cliente no decide por sí solo que una oficina está completa.
+
+El servidor debe evaluar si la sesión está lista para cierre.
+
+Una sesión normal no debe cerrar con:
+
+- bienes esperados pendientes;
+- ambigüedades sin resolver;
+- provisionales incompletos;
+- discrepancias insuficientemente documentadas;
+- evidencia requerida ausente o alterada;
+- incidencias estructuralmente inválidas.
+
+La pantalla **¿Puedo salir de esta oficina?** debe reflejar la evaluación del servidor.
+
+## Trazabilidad
+
+Correcciones, anulaciones, evidencia, excepciones y cierres deben conservar historia y auditoría.
+
+Nunca destruir silenciosamente observaciones o evidencia histórica.
+
+Las sesiones cerradas son inmutables salvo un procedimiento explícito de migración compatible y probado.
 
 ## Protección de datos
 
-- Tratar `imports/ACTIVOS.xlsx` como fuente original de solo lectura: nunca modificarla, sobrescribirla, renombrarla ni usarla como salida.
-- Nunca publicar XLS/XLSX, CSV, SQLite, bases de datos, fotografías, exportaciones, respaldos, certificados, claves, `.env`, tokens ni datos municipales.
-- No importar ni restaurar datos sin autorización explícita del usuario y una elección expresa de modo.
-- Nunca sobrescribir `data/inventario.sqlite`. Si ya existe y se intenta importar o restaurar otra base, detenerse e informar el conflicto.
-- No borrar ni reiniciar sesiones u observaciones existentes. Las sesiones cerradas son evidencia histórica.
-- Mantener datos reales fuera de fixtures, capturas, logs, documentación y mensajes de prueba.
-- Usar en pruebas solo datos sintéticos que no deriven de registros reales.
-- Guardar códigos, identificadores y folios como `TEXT` en todas las capas y preservar ceros iniciales.
-- No imprimir tokens móviles, secretos o datos administrativos en consola.
+- `imports/ACTIVOS.xlsx` es una fuente original de sólo lectura.
+- Nunca publicar XLS/XLSX, CSV, SQLite, fotografías, exportaciones, respaldos, certificados, claves, `.env`, tokens o datos administrativos reales.
+- Nunca usar datos reales en fixtures, pruebas o documentación.
+- Nunca sobrescribir una SQLite existente durante una instalación/restauración.
+- Mantener códigos e identificadores como `TEXT` y preservar ceros iniciales.
+- No imprimir tokens móviles ni secretos en consola.
+- Confirmar rutas privadas mediante `git check-ignore` antes de publicar.
 
-Los directorios `imports/`, `data/` y `backups/` son privados incluso cuando existen solo en el equipo de operación. Confirmar siempre su exclusión con `git check-ignore`.
+## Instalación
+
+La guía canónica es:
+
+`docs/INSTALACION-WINDOWS.md`
+
+El modo debe elegirse expresamente:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1 -Mode NUEVO
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1 -Mode RESTAURAR
+```
+
+`setup.ps1` no instala herramientas del sistema automáticamente y no debe copiar datos sin autorización explícita.
+
+GitHub CLI (`gh`) es opcional para una copia ya clonada.
+
+## Operación
+
+La forma normal de iniciar y detener es mediante:
+
+```text
+Iniciar Inventario Terreno.cmd
+Detener Inventario Terreno.cmd
+```
+
+Los scripts `.ps1` son principalmente instalación, diagnóstico y soporte.
+
+## HTTPS y móvil
+
+HTTP utiliza el puerto 3180.
+
+HTTPS local, cuando está configurado, utiliza 3443.
+
+El teléfono debe operar en una red privada autorizada y usar un enlace temporal generado desde una sesión.
+
+No abrir puertos hacia Internet.
+
+Una VPN/WireGuard puede interferir con el acceso a la LAN; no modificar automáticamente la configuración VPN del dispositivo.
+
+## Respaldos
+
+SQLite:
+
+```powershell
+npm.cmd run backup
+```
+
+Cuando existan fotografías, un respaldo operacional completo debe considerar también `evidence/`.
+
+No mezclar certificados con respaldos de inventario.
 
 ## Reglas técnicas
 
-- Usar JavaScript ES Modules (`import`/`export`), no CommonJS.
-- Mantener compatibilidad con Node.js 24.
-- Mantener separadas la lectura Excel, persistencia SQLite, API y presentación.
-- Validar entradas, rutas y nombres de archivo. No construir SQL concatenando datos externos.
-- El servidor operativo debe escuchar en `0.0.0.0:3180`, pero aceptar clientes solo de localhost o redes IPv4 privadas.
-- No instalar dependencias nuevas sin justificar su necesidad dentro de la tecnología aprobada.
+- Usar ES Modules (`import`/`export`).
+- Mantener compatibilidad con Node.js 24 mientras `package.json` lo declare.
+- Mantener separadas importación, persistencia, API y presentación.
+- Validar entradas y rutas.
+- No concatenar SQL con datos externos.
+- No exponer `evidence/` como directorio estático navegable.
+- No instalar dependencias nuevas sin justificar su necesidad.
 
-## Verificación y bloqueos
+## Verificación
 
-- Ejecutar `npm.cmd test`, `npm.cmd run test:mobile` y `git diff --check` antes de entregar cambios.
-- Revisar `git status --short` y confirmar que no aparezcan artefactos sensibles.
-- Verificar `http://localhost:3180` y al menos una URL LAN cuando el servidor esté activo.
-- No hacer commits, push, PR ni crear remotos salvo solicitud explícita.
-- Si falta una herramienta, el puerto está ocupado, hay conflicto de datos, no existe autorización o una prueba falla, detenerse, explicar el bloqueo con evidencia y no improvisar usando datos reales.
+Antes de entregar cambios:
+
+```powershell
+npm.cmd test
+npm.cmd run test:mobile
+git diff --check
+git status --short
+```
+
+Para una estación operacional completa:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
+```
+
+## Git
+
+Antes de commit/push:
+
+- revisar `git status --short`;
+- confirmar que no haya datos reales;
+- comprobar rutas privadas con `git check-ignore`;
+- no usar `git add .` a ciegas;
+- no forzar pushes sin una razón explícita.
+
+Si falta una herramienta, existe conflicto de datos, una prueba falla o hay duda sobre privacidad, detenerse e informar antes de modificar datos reales.

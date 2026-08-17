@@ -13,6 +13,7 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Variables de entorno, configuración local y secretos
+local-certs/
 .env
 .env.*
 *.env
