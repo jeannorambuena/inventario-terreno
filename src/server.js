@@ -21,7 +21,7 @@ function isLoopbackClient(address = '') {
 
 function isMobileLanPath(request) {
   if (request.path === '/api/health' || request.path === '/api/network-info' || request.path === '/mobile') return true;
-  if (['/mobile.js', '/mobile.css', '/incidence.js', '/code-normalization.js', '/icons.svg'].includes(request.path)) return true;
+  if (['/mobile.js', '/mobile-polling.js', '/mobile.css', '/incidence.js', '/code-normalization.js', '/icons.svg'].includes(request.path)) return true;
   return /^\/api\/sessions\/\d+\/mobile(?:$|-observations(?:\/\d+\/evidence)?$|-incidences$)/.test(request.path);
 }
 
