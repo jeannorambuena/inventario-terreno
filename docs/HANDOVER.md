@@ -1,80 +1,138 @@
-# Handover entre el Dell de terreno y el equipo principal
+# Handover entre equipos
 
-## Alcance
+## Objetivo
 
-El Dell personal con Windows es el equipo de operación en terreno. El HP 240 G6 con Linux Mint queda fuera del flujo y no requiere scripts Bash ni documentación operativa.
+Este documento permite trasladar Inventario Terreno a otro equipo Windows sin depender del equipo original ni mezclar código con datos privados.
 
-## Lo que viaja por Git
+## Separación fundamental
 
-- Código en `src/` y `public/`.
-- Pruebas sintéticas en `tests/`.
-- Documentación en `docs/`.
-- Scripts PowerShell en `scripts/`.
-- Manifiestos npm.
+### Código
 
-## Lo que nunca viaja por Git
+Viaja por GitHub:
 
-- `imports/ACTIVOS.xlsx` u otras planillas.
-- `data/inventario.sqlite` y bases derivadas.
-- `backups/`.
-- `local-certs/`, certificados, claves y la CA de `mkcert`.
-- Fotografías, exportaciones, `.env`, tokens y datos administrativos.
+- `src/`
+- `public/`
+- `tests/`
+- `scripts/`
+- `docs/`
+- `package.json`
+- `package-lock.json`
+- launchers `.cmd`
 
-Los datos y certificados se trasladan únicamente por canales autorizados separados. La clave privada de la CA (`rootCA-key.pem`) nunca sale del Dell.
+### Datos
 
-## Entrega inicial al Dell
+Viajan por un canal autorizado separado:
 
-1. Clonar el commit validado desde GitHub.
-2. Confirmar Node.js 24 y ejecutar `npm.cmd ci`.
-3. Ejecutar suites general y móvil.
-4. Elegir explícitamente `NUEVO` o `RESTAURAR`.
-5. Transferir Excel o SQLite por separado y comparar SHA-256 en origen y destino.
-6. Validar SQLite con `PRAGMA integrity_check` en modo lectura.
-7. Configurar `mkcert`, certificado e instalación manual de la CA del Samsung.
-8. Ejecutar `verify.ps1` y comprobar HTTP/HTTPS local y LAN.
+- `imports/ACTIVOS.xlsx` u otra planilla maestra;
+- `data/inventario.sqlite`;
+- `evidence/`;
+- respaldos;
+- exportaciones reales.
 
-Nunca copie una base sobre `data/inventario.sqlite` existente. Nunca importe Excel sobre una base restaurada.
+### Configuración local
+
+No se comparte por Git:
+
+- `local-certs/`;
+- claves privadas;
+- CA local;
+- `.env`;
+- tokens.
+
+## Traslado a un equipo nuevo
+
+1. Instale Git y Node.js 24.x.
+2. Clone la versión estable desde GitHub.
+3. Ejecute `npm.cmd ci`.
+4. Ejecute `npm.cmd test` y `npm.cmd run test:mobile`.
+5. Decida explícitamente `NUEVO` o `RESTAURAR`.
+6. Traslade datos privados por separado.
+7. Compare SHA-256 antes y después del traslado.
+8. Compruebe `PRAGMA integrity_check` en SQLite.
+9. Restaure `evidence/` si existen fotografías históricas.
+10. Configure HTTPS local si utilizará el terminal móvil.
+11. Inicie mediante `Iniciar Inventario Terreno.cmd`.
+12. Ejecute `verify.ps1` con el servidor activo.
+13. Haga una prueba notebook + teléfono antes de una jornada real.
+
+Consulte [INSTALACION-WINDOWS.md](INSTALACION-WINDOWS.md).
+
+## Modo NUEVO
+
+Se utiliza cuando el destino construirá su base a partir de una planilla compatible.
+
+No debe existir previamente:
+
+```text
+imports/ACTIVOS.xlsx
+data/inventario.sqlite
+```
+
+La importación debe realizarse mediante `scripts/setup.ps1 -Mode NUEVO` con autorización explícita.
+
+## Modo RESTAURAR
+
+Se utiliza cuando el destino continuará una base SQLite existente.
+
+No copie manualmente una base encima de otra.
+
+Use `scripts/setup.ps1 -Mode RESTAURAR` y traslade también `evidence/` cuando la base haga referencia a fotografías.
 
 ## Inicio de jornada
 
-1. Conectar Dell y Samsung a la Wi-Fi municipal autorizada o al hotspot de terreno.
-2. Detectar la IP privada actual.
-3. Si cambió, regenerar el certificado con confirmación explícita.
-4. Ejecutar `npm.cmd test` y `npm.cmd run test:mobile`.
-5. Ejecutar `npm.cmd run backup`.
-6. Iniciar con `scripts/start.ps1`.
-7. Comprobar `http://localhost:3180/api/health` y `https://IP:3443/api/health`.
+1. Compruebe que el respaldo del día anterior existe.
+2. Inicie con `Iniciar Inventario Terreno.cmd`.
+3. Compruebe `http://localhost:3180`.
+4. Conecte el teléfono sólo si será necesario.
+5. Genere un enlace móvil nuevo desde la sesión.
+6. No reutilice tokens antiguos.
 
-El ingreso de códigos es exclusivamente manual-first (código + Enter). La cámara se utiliza sólo para evidencia fotográfica de incidencias y nunca analiza códigos.
+## Operación
 
-## Cierre de jornada y retorno de resultados
+El flujo oficial es manual-first:
 
-1. Abrir **¿Puedo salir de esta oficina?**, resolver todos los bloqueadores y finalizar las sesiones desde la aplicación; no editar SQLite manualmente.
-2. Detener el servidor de forma controlada.
-3. Ejecutar un respaldo final con `npm.cmd run backup`.
-4. Calcular SHA-256 del respaldo y registrar solo metadatos seguros.
-5. Copiar el respaldo a un medio autorizado y cifrado.
-6. En el equipo principal, verificar nuevamente SHA-256 e integridad SQLite.
-7. Guardar el respaldo recibido como archivo separado y de solo lectura.
-8. No reemplazar ni fusionar automáticamente la base principal. Cualquier consolidación requiere autorización y un procedimiento específico.
-9. Confirmar recepción antes de retirar el medio temporal.
+```text
+código → Enter → siguiente
+```
 
-## Certificados y Samsung
+La cámara sólo sirve para evidencia fotográfica.
 
-- La CA se instala manualmente según `docs/HTTPS-CAMARA.md`.
-- Si cambia la IP del Dell, regenere el certificado; normalmente la misma CA sigue siendo válida.
-- Al terminar el operativo, retire manualmente la CA del Samsung y elimine la copia temporal de `rootCA.pem`.
-- Nunca copie la CA o certificados dentro del repositorio, respaldos de inventario o documentación.
+Antes de abandonar una oficina use:
 
-## Evidencia de entrega
+**¿Puedo salir de esta oficina?**
 
-Registre de forma separada y sin datos municipales:
+El servidor debe declarar que la sesión está lista para cierre.
 
-- hash del commit de código;
+## Cierre de jornada
+
+1. Finalice correctamente las sesiones terminadas.
+2. Detenga mediante `Detener Inventario Terreno.cmd`.
+3. Ejecute `npm.cmd run backup`.
+4. Si hubo fotografías, respalde también `evidence/`.
+5. Calcule SHA-256 de la copia SQLite que vaya a transferirse.
+6. Traslade los datos por un canal autorizado.
+7. Verifique hash e integridad en destino.
+
+## Evidencia mínima de handover
+
+Sin incluir datos reales, registre:
+
+- commit o versión del software;
 - versión de Node.js;
-- resultado de pruebas;
-- SHA-256 y fecha del respaldo transferido;
-- resultado de `PRAGMA integrity_check`;
-- confirmación de retiro de la CA cuando corresponda.
+- resultado de tests;
+- resultado de `integrity_check`;
+- hash SHA-256 del respaldo SQLite transferido;
+- confirmación de que `evidence/` fue trasladado cuando correspondía.
 
-Ante cualquier diferencia de hash, fallo de integridad, conflicto de base existente o duda de autorización, deténgase sin reemplazar archivos.
+## Condiciones de detención
+
+No continúe si:
+
+- el hash cambia inesperadamente;
+- SQLite no devuelve `integrity_check = ok`;
+- ya existe una base destino que sería sobrescrita;
+- faltan fotografías requeridas;
+- aparecen datos privados preparados para Git;
+- una prueba crítica falla.
+
+Conserve los originales y resuelva la causa antes de reemplazar archivos.
