@@ -4,6 +4,8 @@ import { Router } from 'express';
 import QRCode from 'qrcode';
 import { z } from 'zod';
 
+import { createLookupCodeVariants } from '../../public/mobile-scanner.js';
+
 const observationStatuses = [
   'verificado',
   'otra_ubicacion',
@@ -17,6 +19,11 @@ const sessionIdSchema = z.coerce.number().int().positive();
 
 const sessionSchema = z.object({
   locationId: locationIdSchema,
+});
+
+const cancellationSchema = z.object({
+  reason: z.string().trim().min(3).max(1000),
+  confirm: z.literal(true),
 });
 
 const mobileObservationSchema = z.object({
@@ -104,18 +111,34 @@ function getPairing(database, sessionId, request) {
     WHERE p.token_hash = ? AND p.inventory_session_id = ?
   `).get(hashToken(token), sessionId);
   if (!pairing) return { error: 'Token de emparejamiento inválido.', status: 401 };
-  if (pairing.revokedAt || pairing.sessionStatus !== 'open' || Date.parse(pairing.expiresAt) <= Date.now()) {
+  if (pairing.sessionStatus === 'closed') {
+    return { error: 'La sesión fue cerrada desde el notebook.', status: 410, sessionStatus: 'closed' };
+  }
+  if (pairing.sessionStatus === 'cancelled') {
+    return { error: 'La sesión fue cancelada desde el notebook.', status: 410, sessionStatus: 'cancelled' };
+  }
+  if (pairing.revokedAt) {
+    return { error: 'Token de emparejamiento revocado.', status: 401 };
+  }
+  if (Date.parse(pairing.expiresAt) <= Date.now()) {
     return { error: 'Token de emparejamiento expirado.', status: 401 };
   }
   return { pairing };
 }
 
 function findAssetsByCode(database, code) {
+  const variants = createLookupCodeVariants(code);
+  if (variants.length === 0) return [];
+  const placeholders = variants.map(() => '?').join(', ');
   return database.prepare(`
     ${assetProjection()}
-    WHERE a.asset_code = ? OR a.scanner_code = ?
-    ORDER BY CASE WHEN a.asset_code = ? THEN 0 ELSE 1 END
-  `).all(code, code, code);
+    WHERE a.asset_code IN (${placeholders}) OR a.scanner_code IN (${placeholders})
+    ORDER BY CASE
+      WHEN a.asset_code = ? THEN 0
+      WHEN a.scanner_code = ? THEN 1
+      ELSE 2
+    END, a.asset_code
+  `).all(...variants, ...variants, String(code).trim(), String(code).trim());
 }
 
 function classifyAsset(asset, sessionLocationId) {
@@ -216,6 +239,8 @@ function getSessionSummary(database, sessionId) {
       s.status_code AS status,
       s.started_at AS startedAt,
       s.completed_at AS completedAt,
+      s.cancelled_at AS cancelledAt,
+      s.cancellation_reason AS cancellationReason,
       l.direction,
       l.department,
       l.section
@@ -306,15 +331,72 @@ function getSessionSummary(database, sessionId) {
   };
 }
 
+function getOpenSessionSummaries(database, locationId) {
+  return database.prepare(`
+    SELECT id
+    FROM inventory_sessions
+    WHERE location_id = ? AND status_code = 'open'
+    ORDER BY id
+  `).all(locationId).map(({ id }) => getSessionSummary(database, id));
+}
+
+function startOrResumeSession(database, locationId) {
+  return database.transaction(() => {
+    const openSessions = getOpenSessionSummaries(database, locationId);
+    if (openSessions.length > 1) return { conflict: openSessions };
+    if (openSessions.length === 1) {
+      database.prepare(`
+        INSERT OR IGNORE INTO open_session_locks (location_id, inventory_session_id)
+        VALUES (?, ?)
+      `).run(locationId, openSessions[0].id);
+      return { session: openSessions[0], resumed: true };
+    }
+
+    const created = database.prepare(`
+      INSERT INTO inventory_sessions (session_code, location_id, status_code, started_at)
+      VALUES (?, ?, 'open', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      RETURNING id
+    `).get(randomUUID(), locationId);
+    database.prepare(`
+      INSERT INTO open_session_locks (location_id, inventory_session_id)
+      VALUES (?, ?)
+    `).run(locationId, created.id);
+    return { session: getSessionSummary(database, created.id), resumed: false };
+  }).immediate();
+}
+
+function resolveMobileNetwork(networkInfoProvider) {
+  const provided = networkInfoProvider();
+  if (Array.isArray(provided)) {
+    return {
+      source: 'provided-candidates',
+      baseUrl: null,
+      candidates: provided,
+      selected: provided[0] ?? null,
+      warning: provided.length === 0 ? 'No hay una interfaz LAN confiable; configure MOBILE_BASE_URL.' : null,
+    };
+  }
+  return provided;
+}
+
+function getMobileBaseUrls(networkInfo) {
+  if (networkInfo.baseUrl) return [networkInfo.baseUrl];
+  return networkInfo.candidates.map(({ address }) => `http://${address}:3180`);
+}
+
 export function createApiRouter(database, { networkInfoProvider = () => [] } = {}) {
   const router = Router();
 
   router.get('/network-info', (_request, response) => {
-    const addresses = networkInfoProvider();
+    const networkInfo = resolveMobileNetwork(networkInfoProvider);
+    const baseUrls = getMobileBaseUrls(networkInfo);
     response.json({
       port: 3180,
-      addresses,
-      mobileUrls: addresses.map(({ address }) => `http://${address}:3180/mobile`),
+      source: networkInfo.source,
+      addresses: networkInfo.candidates,
+      selected: networkInfo.selected,
+      warning: networkInfo.warning,
+      mobileUrls: baseUrls.map((baseUrl) => `${baseUrl}/mobile`),
     });
   });
 
@@ -381,13 +463,34 @@ export function createApiRouter(database, { networkInfoProvider = () => [] } = {
     if (!parsed.success) return response.status(400).json({ error: 'Datos de sesión inválidos.' });
     const location = database.prepare('SELECT id FROM locations WHERE id = ?').get(parsed.data.locationId);
     if (!location) return response.status(404).json({ error: 'Ubicación no encontrada.' });
-    const created = database.prepare(`
-      INSERT INTO inventory_sessions (session_code, location_id, status_code, started_at)
-      VALUES (?, ?, 'open', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-      RETURNING id, session_code AS sessionCode, location_id AS locationId,
-        status_code AS status, started_at AS startedAt
-    `).get(randomUUID(), parsed.data.locationId);
-    return response.status(201).json({ session: created });
+    try {
+      const result = startOrResumeSession(database, parsed.data.locationId);
+      if (result.conflict) {
+        return response.status(409).json({
+          error: 'Hay más de una sesión abierta para esta ubicación. Seleccione explícitamente cuál desea reanudar.',
+          sessions: result.conflict,
+        });
+      }
+      return response.status(result.resumed ? 200 : 201).json(result);
+    } catch (error) {
+      if (error.code?.startsWith('SQLITE_CONSTRAINT')) {
+        const openSessions = getOpenSessionSummaries(database, parsed.data.locationId);
+        if (openSessions.length === 1) {
+          return response.status(200).json({ session: openSessions[0], resumed: true });
+        }
+        return response.status(409).json({
+          error: 'No fue posible determinar una única sesión abierta para esta ubicación.',
+          sessions: openSessions,
+        });
+      }
+      throw error;
+    }
+  });
+
+  router.get('/sessions/open', (request, response) => {
+    const parsed = locationIdSchema.safeParse(request.query.locationId);
+    if (!parsed.success) return response.status(400).json({ error: 'locationId inválido.' });
+    return response.json({ sessions: getOpenSessionSummaries(database, parsed.data) });
   });
 
   router.post('/sessions/:id/observations', (request, response) => {
@@ -416,18 +519,18 @@ export function createApiRouter(database, { networkInfoProvider = () => [] } = {
       database.transaction(() => {
         database.prepare(`
           UPDATE session_pairings
-          SET revoked_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+          SET revoked_at = COALESCE(revoked_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
           WHERE inventory_session_id = ? AND revoked_at IS NULL
         `).run(sessionId.data);
         database.prepare(`
           INSERT INTO session_pairings (inventory_session_id, token_hash, expires_at)
           VALUES (?, ?, ?)
         `).run(sessionId.data, hashToken(token), expiresAt);
-      })();
+      }).immediate();
 
-      const addresses = networkInfoProvider();
-      const mobileUrls = addresses.map(({ address }) => (
-        `http://${address}:3180/mobile?sessionId=${sessionId.data}&token=${encodeURIComponent(token)}`
+      const networkInfo = resolveMobileNetwork(networkInfoProvider);
+      const mobileUrls = getMobileBaseUrls(networkInfo).map((baseUrl) => (
+        `${baseUrl}/mobile?sessionId=${sessionId.data}&token=${encodeURIComponent(token)}`
       ));
       if (mobileUrls.length === 0) {
         mobileUrls.push(`http://localhost:3180/mobile?sessionId=${sessionId.data}&token=${encodeURIComponent(token)}`);
@@ -446,7 +549,7 @@ export function createApiRouter(database, { networkInfoProvider = () => [] } = {
     const sessionId = sessionIdSchema.safeParse(request.params.id);
     if (!sessionId.success) return response.status(400).json({ error: 'Id de sesión inválido.' });
     const authorized = getPairing(database, sessionId.data, request);
-    if (authorized.error) return response.status(authorized.status).json({ error: authorized.error });
+    if (authorized.error) return response.status(authorized.status).json({ error: authorized.error, sessionStatus: authorized.sessionStatus });
     const summary = getSessionSummary(database, sessionId.data);
     const code = String(request.query.q ?? '').trim();
     const lookup = code ? buildLookup(database, sessionId.data, summary.locationId, code) : null;
@@ -471,7 +574,7 @@ export function createApiRouter(database, { networkInfoProvider = () => [] } = {
       return response.status(400).json({ error: 'Observación móvil inválida.' });
     }
     const authorized = getPairing(database, sessionId.data, request);
-    if (authorized.error) return response.status(authorized.status).json({ error: authorized.error });
+    if (authorized.error) return response.status(authorized.status).json({ error: authorized.error, sessionStatus: authorized.sessionStatus });
     const summary = getSessionSummary(database, sessionId.data);
     const lookup = buildLookup(database, sessionId.data, summary.locationId, parsed.data.code);
     const selectedAsset = parsed.data.assetId
@@ -517,6 +620,15 @@ export function createApiRouter(database, { networkInfoProvider = () => [] } = {
     return response.json({ summary });
   });
 
+  router.get('/sessions/history', (_request, response) => {
+    const sessions = database.prepare(`
+      SELECT id FROM inventory_sessions
+      WHERE status_code IN ('closed', 'cancelled')
+      ORDER BY COALESCE(completed_at, cancelled_at, started_at) DESC, id DESC
+    `).all().map(({ id }) => getSessionSummary(database, id));
+    return response.json({ sessions });
+  });
+
   router.get('/sessions/:id/pending-assets', (request, response) => {
     const parsed = sessionIdSchema.safeParse(request.params.id);
     if (!parsed.success) return response.status(400).json({ error: 'Id de sesión inválido.' });
@@ -544,6 +656,9 @@ export function createApiRouter(database, { networkInfoProvider = () => [] } = {
     if (!parsed.success) return response.status(400).json({ error: 'Id de sesión inválido.' });
     const currentSummary = getSessionSummary(database, parsed.data);
     if (!currentSummary) return response.status(404).json({ error: 'Sesión no encontrada.' });
+    if (currentSummary.status === 'cancelled') {
+      return response.status(409).json({ error: 'Una sesión cancelada es inmutable.', summary: currentSummary });
+    }
     if (currentSummary.status === 'open' && currentSummary.pendientes > 0) {
       return response.status(409).json({
         error: `No puede cerrar la sesión: quedan ${currentSummary.pendientes} bienes pendientes de revisión.`,
@@ -555,12 +670,48 @@ export function createApiRouter(database, { networkInfoProvider = () => [] } = {
       SET status_code = 'closed', completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
       WHERE id = ? AND status_code = 'open'
     `).run(parsed.data);
+    if (closed.changes > 0) {
+      database.prepare('DELETE FROM open_session_locks WHERE inventory_session_id = ?').run(parsed.data);
+    }
     database.prepare(`
       UPDATE session_pairings
       SET revoked_at = COALESCE(revoked_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
       WHERE inventory_session_id = ?
     `).run(parsed.data);
     return response.json({ summary: getSessionSummary(database, parsed.data) });
+  });
+
+  router.post('/sessions/:id/cancel', (request, response) => {
+    const sessionId = sessionIdSchema.safeParse(request.params.id);
+    const parsed = cancellationSchema.safeParse(request.body);
+    if (!sessionId.success || !parsed.success) {
+      return response.status(400).json({ error: 'La cancelación requiere motivo y confirmación expresa.' });
+    }
+
+    const result = database.transaction(() => {
+      const current = getSessionSummary(database, sessionId.data);
+      if (!current) return { error: 'Sesión no encontrada.', status: 404 };
+      if (current.status !== 'open') {
+        return { error: 'Solo una sesión abierta puede cancelarse.', status: 409, summary: current };
+      }
+      database.prepare(`
+        UPDATE inventory_sessions
+        SET status_code = 'cancelled',
+            cancelled_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+            cancellation_reason = ?
+        WHERE id = ? AND status_code = 'open'
+      `).run(parsed.data.reason, sessionId.data);
+      database.prepare('DELETE FROM open_session_locks WHERE inventory_session_id = ?').run(sessionId.data);
+      database.prepare(`
+        UPDATE session_pairings
+        SET revoked_at = COALESCE(revoked_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        WHERE inventory_session_id = ?
+      `).run(sessionId.data);
+      return { summary: getSessionSummary(database, sessionId.data) };
+    }).immediate();
+
+    if (result.error) return response.status(result.status).json(result);
+    return response.json(result);
   });
 
   return router;

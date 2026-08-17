@@ -14,6 +14,8 @@ El repositorio contiene el MVP local, su API, interfaces de notebook y móvil, i
 - Lectura de planillas: ExcelJS.
 - Entorno objetivo: Windows, sin conexión requerida.
 
+El equipo operativo de terreno es un notebook Dell personal con Windows. No se mantienen scripts de instalación o arranque para Linux.
+
 El MVP no utilizará Docker, PHP, Java ni APIs de inteligencia artificial.
 
 ## Arquitectura resumida
@@ -55,10 +57,13 @@ En Windows, Codex debe leer `AGENTS.md` y seguir [docs/INSTALACION-NUEVO-EQUIPO.
 
 ```powershell
 .\scripts\setup.ps1 -Mode NUEVO
+.\scripts\setup-https.ps1
 .\scripts\verify.ps1
 .\scripts\start.ps1
 ```
 
 Si la política local bloquea archivos `.ps1`, ejecútelos con `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...`; el bypass se limita al proceso actual y no cambia la configuración global.
 
-Para un traspaso, consulte también [docs/HANDOVER.md](docs/HANDOVER.md) y [docs/DATOS-LOCALES.md](docs/DATOS-LOCALES.md). Los scripts nunca eligen un modo, importan datos o sobrescriben una base existente de forma automática.
+Para habilitar la cámara del Samsung mediante HTTPS local, instale `mkcert` de forma explícita y siga [docs/HTTPS-CAMARA.md](docs/HTTPS-CAMARA.md). Los certificados se crean solo con confirmación, quedan en `local-certs/` y nunca se publican. El servidor mantiene HTTP en `3180` y habilita HTTPS en `3443` cuando existen certificado y clave.
+
+Para un traspaso, consulte también [docs/HANDOVER.md](docs/HANDOVER.md) y [docs/DATOS-LOCALES.md](docs/DATOS-LOCALES.md). Los scripts nunca eligen un modo, importan datos o sobrescriben una base existente de forma automática. Se exige respaldo antes y después de cada jornada y traslado separado con SHA-256 e integridad SQLite.

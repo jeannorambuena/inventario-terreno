@@ -41,6 +41,7 @@ describe('database initialization', () => {
         'inventory_sessions',
         'locations',
         'observations',
+        'open_session_locks',
         'session_pairings',
       ]);
     } finally {

@@ -46,6 +46,16 @@ function Assert-IgnoredPath {
   }
 }
 
+function Assert-PortAvailable {
+  param([Parameter(Mandatory)][int]$Port)
+
+  $Listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+  if ($Listeners.Count -gt 0) {
+    $Owners = $Listeners | Select-Object -ExpandProperty OwningProcess -Unique
+    throw "El puerto $Port esta ocupado por PID: $($Owners -join ', '). Detenga el proceso de forma explicita antes de preparar el equipo."
+  }
+}
+
 function Assert-ExplicitDataAuthorization {
   if (-not $ConfirmDataOperation) {
     throw 'La operacion de datos requiere -ConfirmDataOperation. No se realizo ninguna copia ni importacion.'
@@ -95,6 +105,17 @@ foreach ($privateDirectory in @('imports', 'data', 'backups')) {
 Assert-IgnoredPath -RelativePath 'imports/ACTIVOS.xlsx'
 Assert-IgnoredPath -RelativePath 'data/inventario.sqlite'
 Assert-IgnoredPath -RelativePath 'backups/'
+Assert-IgnoredPath -RelativePath 'local-certs/inventario-terreno-cert.pem'
+
+Assert-PortAvailable -Port 3180
+Assert-PortAvailable -Port 3443
+
+if (Get-Command mkcert -ErrorAction SilentlyContinue) {
+  Write-Host 'mkcert detectado. La configuracion HTTPS sigue requiriendo confirmacion explicita mediante scripts/setup-https.ps1.'
+} else {
+  Write-Host 'mkcert no esta instalado. HTTPS puede configurarse despues; consulte docs/HTTPS-CAMARA.md.'
+  Write-Host 'Este script no instala herramientas automaticamente.'
+}
 
 Write-Host 'Instalando dependencias reproducibles con npm.cmd ci...'
 Invoke-Checked -Program 'npm.cmd' -Arguments @('ci')
@@ -147,4 +168,4 @@ if ($Mode -eq 'RESTAURAR' -and -not $RestoreDatabasePath) {
   Write-Host 'Modo RESTAURAR preparado. No se copio ninguna base porque no se autorizo una fuente.'
 }
 
-Write-Host 'Preparacion finalizada. Ejecute .\scripts\verify.ps1 antes de iniciar operacion.'
+Write-Host 'Preparacion finalizada. Configure HTTPS de forma explicita y ejecute .\scripts\verify.ps1 antes de iniciar operacion.'

@@ -61,6 +61,59 @@ describe('inventory API', () => {
     expect(byCode.body.asset.id).toBe(assetId);
   });
 
+  test('resumes the single open session instead of creating a duplicate', async () => {
+    const created = await request(app).post('/api/sessions').send({ locationId }).expect(201);
+    const resumed = await request(app).post('/api/sessions').send({ locationId }).expect(200);
+
+    expect(resumed.body).toMatchObject({ resumed: true, session: { id: created.body.session.id } });
+    expect(database.prepare(`
+      SELECT COUNT(*) AS count FROM inventory_sessions
+      WHERE location_id = ? AND status_code = 'open'
+    `).get(locationId).count).toBe(1);
+  });
+
+  test('two concurrent starts produce one open session', async () => {
+    const responses = await Promise.all([
+      request(app).post('/api/sessions').send({ locationId }),
+      request(app).post('/api/sessions').send({ locationId }),
+    ]);
+
+    expect(responses.map(({ status }) => status).sort()).toEqual([200, 201]);
+    expect(new Set(responses.map(({ body }) => body.session.id)).size).toBe(1);
+    expect(database.prepare(`
+      SELECT COUNT(*) AS count FROM inventory_sessions
+      WHERE location_id = ? AND status_code = 'open'
+    `).get(locationId).count).toBe(1);
+  });
+
+  test('database trigger rejects a direct duplicate open session', async () => {
+    await request(app).post('/api/sessions').send({ locationId }).expect(201);
+    expect(() => database.prepare(`
+      INSERT INTO inventory_sessions (session_code, location_id, status_code)
+      VALUES ('direct-synthetic-duplicate', ?, 'open')
+    `).run(locationId)).toThrow(/open session already exists/);
+  });
+
+  test('reports a historical multiple-open-session conflict without choosing one', async () => {
+    const first = await request(app).post('/api/sessions').send({ locationId }).expect(201);
+    database.exec(`
+      DROP TRIGGER prevent_duplicate_open_session_insert;
+      DROP TRIGGER prevent_duplicate_open_session_update;
+    `);
+    database.prepare(`
+      INSERT INTO inventory_sessions (session_code, location_id, status_code)
+      VALUES ('historical-synthetic-conflict', ?, 'open')
+    `).run(locationId);
+
+    const conflict = await request(app).post('/api/sessions').send({ locationId }).expect(409);
+    expect(conflict.body.sessions).toHaveLength(2);
+    expect(conflict.body.sessions.map(({ id }) => id)).toContain(first.body.session.id);
+    expect(database.prepare(`
+      SELECT COUNT(*) AS count FROM inventory_sessions
+      WHERE location_id = ? AND status_code = 'open'
+    `).get(locationId).count).toBe(2);
+  });
+
   test('creates a session, records an observation, summarizes and closes it', async () => {
     const created = await request(app)
       .post('/api/sessions')

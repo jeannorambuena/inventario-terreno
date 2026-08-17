@@ -48,9 +48,41 @@ CREATE TABLE IF NOT EXISTS inventory_sessions (
   status_code TEXT NOT NULL DEFAULT 'open',
   started_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   completed_at TEXT,
+  cancelled_at TEXT,
+  cancellation_reason TEXT,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
   FOREIGN KEY (location_id) REFERENCES locations(id)
 );
+
+CREATE TABLE IF NOT EXISTS open_session_locks (
+  location_id INTEGER PRIMARY KEY,
+  inventory_session_id INTEGER NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  FOREIGN KEY (location_id) REFERENCES locations(id),
+  FOREIGN KEY (inventory_session_id) REFERENCES inventory_sessions(id)
+);
+
+CREATE TRIGGER IF NOT EXISTS prevent_duplicate_open_session_insert
+BEFORE INSERT ON inventory_sessions
+WHEN NEW.status_code = 'open' AND NEW.location_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM inventory_sessions
+    WHERE location_id = NEW.location_id AND status_code = 'open'
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'open session already exists for location');
+END;
+
+CREATE TRIGGER IF NOT EXISTS prevent_duplicate_open_session_update
+BEFORE UPDATE OF status_code, location_id ON inventory_sessions
+WHEN NEW.status_code = 'open' AND NEW.location_id IS NOT NULL
+  AND EXISTS (
+    SELECT 1 FROM inventory_sessions
+    WHERE location_id = NEW.location_id AND status_code = 'open' AND id <> NEW.id
+  )
+BEGIN
+  SELECT RAISE(ABORT, 'open session already exists for location');
+END;
 
 CREATE TABLE IF NOT EXISTS observations (
   id INTEGER PRIMARY KEY,

@@ -3,68 +3,161 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <meta name="theme-color" content="#0d4e31">
+    <meta name="theme-color" content="#34454c">
     <title>Inventario Terreno Móvil</title>
     <link rel="stylesheet" href="/mobile.css">
   </head>
   <body>
-    <header>
-      <div>
-        <p class="eyebrow">Sesión móvil local</p>
-        <h1>Inventario Terreno</h1>
-      </div>
-      <span id="network-state">Conectando…</span>
-    </header>
-    <main>
-      <section class="card session-card">
-        <p id="session-location">Cargando ubicación…</p>
-        <div class="progress-copy">
+    <div class="mobile-shell">
+      <header class="mobile-app-bar">
+        <div class="mobile-identity">
+          <span class="app-mark" aria-hidden="true">
+            <svg class="icon icon--brand"><use href="/icons.svg#inventory"></use></svg>
+          </span>
           <div>
+            <p class="app-kicker">Revisión en terreno</p>
+            <h1>Inventario</h1>
+          </div>
+        </div>
+        <span id="network-state" class="network-chip">
+          <svg class="icon" aria-hidden="true"><use href="/icons.svg#connected"></use></svg>
+          <span>Conectando…</span>
+        </span>
+      </header>
+
+      <main class="mobile-main">
+        <section class="card session-card" aria-labelledby="mobile-location-title">
+          <div class="session-card__location">
+            <span class="component-icon" aria-hidden="true">
+              <svg class="icon"><use href="/icons.svg#location"></use></svg>
+            </span>
+            <div>
+              <p class="section-kicker">Ubicación seleccionada</p>
+              <p id="session-location" class="session-location" role="heading" aria-level="2">Cargando ubicación…</p>
+            </div>
+          </div>
+          <div class="session-meta-row">
+            <p id="session-state" class="session-state">Sesión abierta</p>
+            <span id="progress-percent" class="mobile-percentage">0%</span>
+          </div>
+          <div class="progress-copy">
             <strong id="progress-label">0 de 0 bienes revisados</strong>
-            <span id="conformance-label">0 bienes conformes</span>
+            <div class="metric-pills">
+              <span id="conformance-label">0 bienes conformes</span>
+              <span id="pending-label">0 pendientes</span>
+            </div>
           </div>
-          <span id="progress-percent">0%</span>
-        </div>
-        <progress id="progress" value="0" max="100">0%</progress>
-      </section>
-      <section class="card">
-        <form id="lookup-form">
-          <label for="code">Código del bien o escáner</label>
-          <div class="input-row">
-            <input id="code" inputmode="numeric" autocomplete="off" required>
-            <button type="submit">Buscar</button>
+          <progress id="progress" value="0" max="100">0%</progress>
+          <p id="conformance-percent" class="conformance-line">0% de conformidad</p>
+        </section>
+
+        <section class="card scan-card" aria-labelledby="scan-title">
+          <div class="card-heading">
+            <span class="component-icon component-icon--accent" aria-hidden="true">
+              <svg class="icon"><use href="/icons.svg#search"></use></svg>
+            </span>
+            <div>
+              <p class="section-kicker">Acción principal</p>
+              <h2 id="scan-title">Ingresar código</h2>
+            </div>
           </div>
-        </form>
-        <button id="camera-button" type="button" class="secondary">Usar cámara</button>
-        <p id="camera-message" class="hint"></p>
-        <div id="camera-panel" hidden>
-          <video id="camera-preview" playsinline muted></video>
-          <button id="stop-camera" type="button" class="danger">Detener cámara</button>
-        </div>
-      </section>
-      <section id="result-card" class="card" hidden aria-live="polite">
-        <p id="classification" class="classification"></p>
-        <h2 id="asset-name"></h2>
-        <dl id="asset-details"></dl>
-        <div id="match-choices" class="match-choices"></div>
-        <form id="observation-form">
-          <label>Estado
-            <select id="status" required>
-              <option value="verificado">Verificado</option>
-              <option value="otra_ubicacion">Otra ubicación</option>
-              <option value="no_ubicado">No ubicado</option>
-              <option value="desconocido">Desconocido</option>
-              <option value="dato_distinto">Dato distinto</option>
-            </select>
-          </label>
-          <label>Observación
-            <textarea id="notes" rows="3" maxlength="2000"></textarea>
-          </label>
-          <button type="submit">Registrar</button>
-        </form>
-      </section>
-      <p id="message" role="status" aria-live="polite"></p>
-    </main>
+          <form id="lookup-form">
+            <label for="code">Código del bien o escáner</label>
+            <div class="search-composer">
+              <svg class="icon search-composer__icon" aria-hidden="true"><use href="/icons.svg#search"></use></svg>
+              <input id="code" inputmode="text" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+              <button type="submit">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"></use></svg>
+                <span>Buscar</span>
+              </button>
+            </div>
+          </form>
+          <button id="camera-button" type="button" class="secondary camera-action">
+            <svg class="icon" aria-hidden="true"><use href="/icons.svg#camera"></use></svg>
+            <span>Escanear etiqueta</span>
+          </button>
+          <p id="camera-message" class="camera-hint"></p>
+          <div id="camera-panel" class="camera-panel" role="dialog" aria-modal="true" aria-label="Escáner de etiqueta" hidden>
+            <div class="camera-modal">
+              <div class="camera-modal__heading">
+                <div>
+                  <p class="camera-modal__kicker">Escáner de etiqueta</p>
+                  <h2>Buscando código…</h2>
+                </div>
+                <button id="stop-camera" type="button" class="camera-close" aria-label="Cerrar cámara">
+                  <svg class="icon" aria-hidden="true"><use href="/icons.svg#close"></use></svg>
+                  <span>Cerrar</span>
+                </button>
+              </div>
+            <div class="camera-viewport">
+              <video id="camera-preview" playsinline muted></video>
+              <div class="barcode-guide" aria-hidden="true"></div>
+              <div class="scan-line" aria-hidden="true"></div>
+            </div>
+            <div class="camera-status" aria-live="polite">
+              <span class="camera-status__pulse" aria-hidden="true"></span>
+              <span id="camera-search-state">Buscando código…</span>
+            </div>
+            <p class="camera-instruction">Coloque todas las barras dentro del recuadro y mantenga el teléfono quieto.</p>
+            <div class="camera-capabilities">
+              <button id="toggle-torch" type="button" class="secondary" hidden>
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#camera"></use></svg>
+                <span>Encender luz</span>
+              </button>
+              <label id="zoom-control" class="zoom-control" hidden>
+                <span>Zoom</span>
+                <input id="camera-zoom" type="range" aria-label="Zoom de cámara">
+              </label>
+            </div>
+            <div class="camera-controls">
+              <button id="analyze-code" type="button" class="secondary" hidden>
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#search"></use></svg>
+                <span>Intentar lectura ahora</span>
+              </button>
+            </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="result-card" class="card asset-card" hidden aria-live="polite">
+          <div class="asset-card__topline">
+            <p id="classification" class="classification"></p>
+            <span class="asset-symbol" aria-hidden="true">
+              <svg class="icon"><use href="/icons.svg#inventory"></use></svg>
+            </span>
+          </div>
+          <h2 id="asset-name"></h2>
+          <dl id="asset-details" class="detail-grid"></dl>
+          <div id="match-choices" class="match-choices"></div>
+          <form id="observation-form" class="observation-form">
+            <div class="form-heading">
+              <svg class="icon" aria-hidden="true"><use href="/icons.svg#edit"></use></svg>
+              <span>Resultado de la revisión</span>
+            </div>
+            <label>Estado
+              <select id="status" required>
+                <option value="verificado">Verificado</option>
+                <option value="otra_ubicacion">Otra ubicación</option>
+                <option value="no_ubicado">No ubicado</option>
+                <option value="desconocido">Desconocido</option>
+                <option value="dato_distinto">Dato distinto</option>
+              </select>
+            </label>
+            <label>Observación
+              <textarea id="notes" rows="3" maxlength="2000"></textarea>
+            </label>
+            <div class="mobile-action-bar">
+              <button type="submit">
+                <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"></use></svg>
+                <span>Registrar revisión</span>
+              </button>
+            </div>
+          </form>
+        </section>
+
+        <p id="message" class="app-alert" role="status" aria-live="polite"></p>
+      </main>
+    </div>
     <script src="/vendor/zxing-browser.min.js"></script>
     <script type="module" src="/mobile.js"></script>
   </body>

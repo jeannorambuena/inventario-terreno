@@ -1,98 +1,174 @@
-# Instalación en un nuevo equipo Windows
+# Instalación en el notebook Dell con Windows
 
-## Requisitos
+El equipo operativo definitivo es un notebook Dell personal con Windows 10 u 11. El HP 240 G6 con Linux Mint no forma parte del entorno de operación y este proyecto no mantiene scripts Bash.
 
-- Windows 10 u 11.
-- Git.
-- GitHub CLI (`gh`) autenticado para clonar un repositorio privado.
-- Node.js 24.x con npm.
-- PowerShell 5.1 o PowerShell 7.
-- Notebook y Samsung conectados a la misma red privada para la operación móvil.
+## 1. Preparar Windows
 
-En PowerShell se usan `npm.cmd` y `npx.cmd` para evitar conflictos con los wrappers `.ps1`.
+Instale de forma explícita y desde fuentes oficiales:
 
-## 1. Clonar
+- Git;
+- GitHub CLI (`gh`);
+- Node.js 24.x con npm;
+- Windows PowerShell 5.1 o PowerShell 7;
+- `mkcert` cuando se habilitará cámara por HTTPS.
+
+Compruebe versiones:
 
 ```powershell
+git --version
+gh --version
+node --version
+npm.cmd --version
+mkcert -version
+```
+
+No reinstale herramientas compatibles ni permita que scripts descarguen ejecutables automáticamente.
+
+## 2. Clonar desde GitHub
+
+```powershell
+gh auth login
 gh auth status
 gh repo clone jeannorambuena/inventario-terreno
 Set-Location .\inventario-terreno
+git status --branch --short
 ```
 
-Lea `AGENTS.md` antes de ejecutar operaciones de datos.
+Lea `AGENTS.md`. El clon contiene código y pruebas sintéticas, nunca datos municipales.
 
-## 2. Elegir un modo
+## 3. Instalar dependencias y elegir modo
 
-El script no elige por usted:
+Use siempre `npm.cmd` en PowerShell:
 
 ```powershell
-# Equipo sin datos previos.
-.\scripts\setup.ps1 -Mode NUEVO
+npm.cmd ci
+npm.cmd test
+npm.cmd run test:mobile
+```
 
-# Equipo al que se traspasará una base existente.
+El flujo asistido exige una elección expresa:
+
+```powershell
+.\scripts\setup.ps1 -Mode NUEVO
 .\scripts\setup.ps1 -Mode RESTAURAR
 ```
 
-Si la política de PowerShell bloquea scripts locales, use un bypass limitado a ese proceso, sin cambiar la política global:
+Sin una ruta de datos autorizada, ambos modos preparan dependencias y pruebas pero no importan ni restauran nada. Si PowerShell bloquea scripts, use `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ...`; el cambio se limita a ese proceso.
+
+## 4. Copiar datos por separado
+
+Git no transporta `ACTIVOS.xlsx`, `inventario.sqlite` ni respaldos. Use un medio autorizado, preferentemente cifrado, y mantenga Excel y SQLite separados del clon hasta verificar sus huellas.
+
+### Fuente Excel para modo NUEVO
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1 -Mode NUEVO
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\verify.ps1
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
+Get-FileHash -Algorithm SHA256 -LiteralPath 'UNIDAD_AUTORIZADA:\ACTIVOS.xlsx'
+.\scripts\setup.ps1 -Mode NUEVO -ImportExcelPath 'UNIDAD_AUTORIZADA:\ACTIVOS.xlsx' -ConfirmDataOperation
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\imports\ACTIVOS.xlsx'
 ```
 
-Ambos modos detectan herramientas, ejecutan `npm.cmd ci`, las pruebas generales y las móviles, crean solo directorios privados faltantes y verifican las reglas de Git. No importan ni restauran datos automáticamente.
+Compare ambas huellas. La operación se detiene si `imports/ACTIVOS.xlsx` o `data/inventario.sqlite` ya existen.
 
-Si se desea autorizar una copia de datos durante la preparación, se debe proporcionar una ruta y el interruptor de confirmación:
+### SQLite para modo RESTAURAR
+
+Antes de copiar, confirme que no exista una base destino:
 
 ```powershell
-# NUEVO: copiar una fuente Excel protegida y crear la primera SQLite.
-.\scripts\setup.ps1 -Mode NUEVO -ImportExcelPath 'D:\ruta\ACTIVOS.xlsx' -ConfirmDataOperation
-
-# RESTAURAR: copiar una SQLite respaldada a un equipo sin base local.
-.\scripts\setup.ps1 -Mode RESTAURAR -RestoreDatabasePath 'D:\respaldo\inventario.sqlite' -ConfirmDataOperation
+Test-Path -LiteralPath '.\data\inventario.sqlite'
+Get-FileHash -Algorithm SHA256 -LiteralPath 'UNIDAD_AUTORIZADA:\inventario.sqlite'
+.\scripts\setup.ps1 -Mode RESTAURAR -RestoreDatabasePath 'UNIDAD_AUTORIZADA:\inventario.sqlite' -ConfirmDataOperation
+Get-FileHash -Algorithm SHA256 -LiteralPath '.\data\inventario.sqlite'
 ```
 
-Estas operaciones se detienen si el destino ya existe. Nunca sobrescriben `imports/ACTIVOS.xlsx` ni `data/inventario.sqlite`.
+Valide integridad SQLite en modo lectura:
 
-## 3. Verificar
+```powershell
+node --input-type=module -e "import Database from 'better-sqlite3'; const db=new Database('data/inventario.sqlite',{readonly:true,fileMustExist:true}); console.log(db.pragma('integrity_check',{simple:true})); db.close();"
+```
+
+Nunca sobrescriba una SQLite existente. Si el destino existe, deténgase y decida el traspaso con el responsable de los datos.
+
+## 5. Configurar HTTPS y cámara
+
+Consulte [HTTPS-CAMARA.md](HTTPS-CAMARA.md). Resumen:
+
+```powershell
+# Vista previa; no crea certificados.
+.\scripts\setup-https.ps1
+
+# Creación explícita e instalación de la CA solo en el Dell.
+.\scripts\setup-https.ps1 -ConfirmCertificateCreation -InstallLocalCA
+```
+
+El certificado incluye `localhost`, `127.0.0.1`, las IP LAN detectadas y opcionalmente una IP privada adicional:
+
+```powershell
+.\scripts\setup-https.ps1 -AdditionalIp 'IP_PRIVADA_ADICIONAL' -ConfirmCertificateCreation -ConfirmOverwrite
+```
+
+La CA del Samsung se instala y retira manualmente. Nunca se copia a Git ni se instala automáticamente en el teléfono.
+
+## 6. Verificar y arrancar
+
+Con 3180 y 3443 libres:
 
 ```powershell
 .\scripts\verify.ps1
-```
-
-El script informa `PASS` o `FAIL` para herramientas, dependencias, pruebas, SQLite, Excel opcional, protección Git, puerto, HTTP local y LAN. Para comprobar HTTP, el servidor debe estar activo.
-
-## 4. Iniciar
-
-```powershell
 .\scripts\start.ps1
 ```
 
-El proceso queda en primer plano y muestra:
+`start.ps1` no importa datos. Inicia HTTP en `0.0.0.0:3180` y, si existen certificado y clave, HTTPS en `0.0.0.0:3443`. Muestra las URL locales y LAN.
 
-- `http://localhost:3180`
-- una URL por cada IPv4 privada disponible, por ejemplo `http://192.168.1.20:3180`
+Después del arranque, vuelva a ejecutar `verify.ps1` desde otra consola para comprobar HTTP y HTTPS local/LAN. En Firewall de Windows permita Node.js únicamente para redes privadas.
 
-Si Windows Firewall pregunta, permita Node.js solo en redes privadas. No configure redirección de puertos en el router.
+## 7. Wi-Fi municipal y hotspot
 
-## 5. Verificar el Samsung
+En Wi-Fi de una unidad municipal:
 
-1. Conecte el Samsung a la misma Wi-Fi.
-2. Abra la URL LAN mostrada por `start.ps1`.
-3. Confirme que responde la interfaz.
-4. Cree una sesión en el notebook y use el QR temporal para la vista móvil.
+1. Conecte Dell y Samsung a la misma red autorizada.
+2. Compruebe la IP privada y regenere el certificado si cambió.
+3. No eluda aislamiento de clientes ni otras políticas de red.
+4. No abra puertos al exterior.
 
-Consulte `docs/PRUEBA-MOVIL.md` para el recorrido manual.
+En terreno con hotspot:
+
+1. Conecte ambos equipos al hotspot autorizado.
+2. Detecte la nueva IP del Dell.
+3. Regenere el certificado si la IP no estaba incluida.
+4. Use `https://IP_DEL_DELL:3443`.
+
+Si la cámara sigue bloqueada, la entrada manual continúa completamente disponible.
+
+## 8. Rutina de cada jornada
+
+Antes de comenzar:
+
+```powershell
+npm.cmd test
+npm.cmd run test:mobile
+npm.cmd run backup
+.\scripts\verify.ps1
+```
+
+Después de cerrar las sesiones de la jornada:
+
+```powershell
+npm.cmd run backup
+```
+
+Registre fecha, hash SHA-256 y medio autorizado del respaldo sin incluir datos administrativos en documentación o Git.
+
+## 9. Trasladar resultados al equipo principal
+
+1. Cierre la operación y detenga el servidor de forma controlada.
+2. Ejecute un respaldo final.
+3. Calcule SHA-256 del respaldo.
+4. Cópielo mediante un medio autorizado y cifrado, nunca por Git.
+5. En el equipo principal, vuelva a calcular SHA-256 y compare.
+6. Abra la copia en modo lectura y ejecute `PRAGMA integrity_check`.
+7. Conserve el archivo recibido como evidencia separada. No sobrescriba automáticamente la SQLite principal ni intente fusionar bases sin un procedimiento autorizado.
+8. Cuando el traspaso esté confirmado, retire la CA del Samsung siguiendo `HTTPS-CAMARA.md` si ya no se utilizará.
 
 ## Bloqueos seguros
 
-Deténgase y solicite ayuda si:
-
-- Node.js no es 24.x;
-- faltan Git, `gh` o `npm.cmd`;
-- alguna prueba falla;
-- el puerto 3180 está ocupado;
-- ya existe una SQLite y se intenta incorporar otra;
-- no se conoce si corresponde `NUEVO` o `RESTAURAR`;
-- las rutas privadas dejan de estar ignoradas.
+Deténgase si falla una prueba, falta una herramienta, 3180/3443 están ocupados, cambia la IP, la CA no es confiable, una ruta privada no está ignorada o ya existe un destino de datos. No improvise con datos reales.

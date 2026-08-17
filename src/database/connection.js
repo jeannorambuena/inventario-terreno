@@ -31,6 +31,8 @@ function migrateLegacySchema(database) {
   ensureColumn(database, 'assets', 'finbaja', "TEXT NOT NULL DEFAULT ''");
   ensureColumn(database, 'assets', 'scanner_code', "TEXT NOT NULL DEFAULT ''");
   ensureColumn(database, 'inventory_sessions', 'location_id', 'INTEGER REFERENCES locations(id)');
+  ensureColumn(database, 'inventory_sessions', 'cancelled_at', 'TEXT');
+  ensureColumn(database, 'inventory_sessions', 'cancellation_reason', 'TEXT');
 
   const observationColumns = getColumns(database, 'observations');
   const legacyAssetColumn = observationColumns.find(({ name }) => name === 'asset_id');
@@ -90,6 +92,20 @@ function migrateLegacySchema(database) {
       ON observations(inventory_session_id);
     CREATE INDEX IF NOT EXISTS idx_observations_asset_id
       ON observations(asset_id);
+  `);
+
+  database.exec(`
+    DELETE FROM open_session_locks
+    WHERE inventory_session_id IN (
+      SELECT id FROM inventory_sessions WHERE status_code <> 'open'
+    );
+
+    INSERT OR IGNORE INTO open_session_locks (location_id, inventory_session_id)
+    SELECT location_id, MIN(id)
+    FROM inventory_sessions
+    WHERE status_code = 'open' AND location_id IS NOT NULL
+    GROUP BY location_id
+    HAVING COUNT(*) = 1;
   `);
 }
 
