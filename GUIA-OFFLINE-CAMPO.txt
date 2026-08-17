@@ -1,0 +1,172 @@
+INVENTARIO TERRENO v1.0 - GUIA OFFLINE DE CAMPO
+================================================
+
+OBJETIVO
+--------
+Trabajar SIN INTERNET usando solamente:
+- notebook Windows con Inventario Terreno;
+- Samsung como hotspot Wi-Fi y terminal movil.
+
+ARQUITECTURA
+------------
+Samsung (hotspot)  <---- Wi-Fi local privada ---->  Notebook (Node + SQLite)
+
+Internet NO es necesario para registrar bienes, incidencias o evidencias.
+
+ANTES DE PARTIR
+---------------
+[ ] Aplicacion instalada y verificada.
+[ ] Base data\inventario.sqlite presente.
+[ ] imports\ACTIVOS.xlsx presente.
+[ ] evidence\ presente.
+[ ] Respaldo reciente.
+[ ] Hotspot Samsung configurado con nombre y clave conocidos.
+[ ] Notebook ya conoce esa red Wi-Fi.
+[ ] Esta guia esta guardada localmente.
+
+PRUEBA REAL SIN INTERNET
+------------------------
+1. Samsung: apagar DATOS MOVILES.
+2. Samsung: desconectar Wi-Fi externo.
+3. Notebook: desconectar Ethernet y cualquier Wi-Fi con Internet.
+4. Samsung: encender HOTSPOT.
+5. Notebook: conectarse al hotspot Samsung.
+
+COMPROBAR RED EN WINDOWS
+------------------------
+PowerShell:
+
+Get-NetConnectionProfile |
+Where-Object { $_.InterfaceAlias -match 'Wi-Fi|WLAN' } |
+Select-Object Name,InterfaceAlias,NetworkCategory,IPv4Connectivity
+
+La red personal Samsung debe ser Private. Si aparece Public y la interfaz se llama Wi-Fi:
+
+Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private
+
+Si la interfaz tiene otro nombre, usar exactamente ese nombre.
+
+OBTENER IP DEL NOTEBOOK
+-----------------------
+PowerShell:
+
+Get-NetIPAddress -AddressFamily IPv4 |
+Where-Object {
+  $_.IPAddress -like '10.*' -or
+  $_.IPAddress -like '192.168.*' -or
+  $_.IPAddress -match '^172\.(1[6-9]|2[0-9]|3[01])\.'
+} |
+Select-Object InterfaceAlias,IPAddress
+
+Usar la IP de la interfaz Wi-Fi conectada al Samsung.
+NO memorizar una IP de ejemplo: puede cambiar.
+
+INICIAR INVENTARIO
+------------------
+Doble clic:
+
+Iniciar Inventario Terreno.cmd
+
+En el notebook:
+
+http://localhost:3180
+
+PROBAR DESDE EL SAMSUNG
+-----------------------
+En Chrome del Samsung:
+
+http://IP-DEL-NOTEBOOK:3180/api/health
+
+Ejemplo solamente:
+
+http://192.168.43.120:3180/api/health
+
+Debe aparecer:
+
+{"ok":true,"service":"inventario-terreno"}
+
+SI NO APARECE, NO COMENZAR LA OFICINA TODAVIA.
+
+USO MOVIL
+---------
+1. En notebook: abrir o reanudar la sesion correcta.
+2. Generar un ENLACE MOVIL NUEVO.
+3. Abrir QR/enlace desde Samsung.
+4. Confirmar ubicacion y avance correctos.
+5. Trabajar normalmente.
+6. La camara se usa solo para evidencia fotografica.
+
+MODO OFFLINE RECOMENDADO
+------------------------
+Usar HTTP local:
+
+http://IP-DEL-NOTEBOOK:3180
+
+El certificado HTTPS de otra red puede no incluir la IP entregada por el hotspot Samsung.
+No regenerar certificados en terreno salvo que sea estrictamente necesario.
+
+DIAGNOSTICO RAPIDO
+------------------
+A) Servidor local:
+
+Invoke-WebRequest -UseBasicParsing http://localhost:3180/api/health |
+Select-Object StatusCode,Content
+
+Debe responder 200.
+
+B) Puerto:
+
+Get-NetTCPConnection -State Listen |
+Where-Object { $_.LocalPort -eq 3180 } |
+Select-Object LocalAddress,LocalPort,OwningProcess
+
+Debe escuchar en 0.0.0.0:3180.
+
+C) Red:
+
+Get-NetConnectionProfile
+Get-NetIPAddress -AddressFamily IPv4
+
+D) Samsung:
+Abrir http://IP-DEL-NOTEBOOK:3180/api/health
+NO usar localhost en el Samsung.
+
+E) VPN:
+Desactivar temporalmente VPN/WireGuard en notebook o telefono si desvia la red local.
+
+F) Reinicio minimo:
+1. Detener Inventario Terreno.cmd
+2. Apagar/encender hotspot Samsung.
+3. Reconectar notebook.
+4. Obtener NUEVA IP.
+5. Iniciar Inventario Terreno.cmd
+6. Generar ENLACE MOVIL NUEVO.
+
+PLAN B
+------
+Si el Samsung falla, continuar desde el notebook.
+El telefono es auxiliar; la autoridad de cierre esta en el servidor del notebook.
+Antes de abandonar la oficina usar:
+
+¿Puedo salir de esta oficina?
+
+CIERRE DE JORNADA
+-----------------
+1. Detener Inventario Terreno.cmd
+2. Crear respaldo:
+
+cd C:\Users\<USUARIO>\Proyectos\inventario-terreno
+npm.cmd run backup
+
+3. Recordar: el backup SQLite NO incluye las fotos.
+4. Conservar de forma consistente:
+   data\inventario.sqlite
+   backups\
+   evidence\
+   imports\ACTIVOS.xlsx
+5. Nunca subir estos datos privados a GitHub.
+
+REGLA FINAL
+-----------
+INTERNET ES OPCIONAL.
+LA RED LOCAL SAMSUNG <-> NOTEBOOK ES LO ESENCIAL.
