@@ -27,11 +27,15 @@ function Write-Result {
 Set-Location -LiteralPath $ProjectRoot
 
 $MissingTools = @()
-foreach ($tool in @('git', 'gh', 'node', 'npm.cmd')) {
+foreach ($tool in @('git', 'node', 'npm.cmd')) {
   if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { $MissingTools += $tool }
 }
+$GhAvailable = $null -ne (Get-Command gh -ErrorAction SilentlyContinue)
 Write-Result -Check 'Herramientas' -Passed ($MissingTools.Count -eq 0) -Detail $(
-  if ($MissingTools.Count -eq 0) { 'Git, GitHub CLI, Node.js y npm.cmd disponibles.' }
+  if ($MissingTools.Count -eq 0) {
+    if ($GhAvailable) { 'Git, Node.js y npm.cmd disponibles; GitHub CLI tambien esta disponible (opcional).' }
+    else { 'Git, Node.js y npm.cmd disponibles. GitHub CLI no esta instalado, pero no es requerido para operar una copia ya clonada.' }
+  }
   else { "Faltan: $($MissingTools -join ', ')" }
 )
 
@@ -77,11 +81,11 @@ $ExcelExists = Test-Path -LiteralPath $ExcelPath -PathType Leaf
 Write-Result -Check 'Excel local' -Passed $true -Detail $(if ($ExcelExists) { 'Fuente XLSX presente; no se abrio ni modifico.' } else { 'Fuente XLSX no presente (opcional si se restauro SQLite).' })
 
 $Protected = $true
-foreach ($relativePath in @('imports/ACTIVOS.xlsx', 'data/inventario.sqlite', 'backups/', 'local-certs/inventario-terreno-cert.pem')) {
+foreach ($relativePath in @('imports/ACTIVOS.xlsx', 'data/inventario.sqlite', 'backups/', 'evidence/', 'exports/', 'local-certs/inventario-terreno-cert.pem')) {
   & git check-ignore -q -- $relativePath
   if ($LASTEXITCODE -ne 0) { $Protected = $false }
 }
-Write-Result -Check 'Proteccion Git' -Passed $Protected -Detail $(if ($Protected) { 'imports/, data/, backups/ y local-certs/ estan ignorados.' } else { 'Una ruta privada no esta ignorada.' })
+Write-Result -Check 'Proteccion Git' -Passed $Protected -Detail $(if ($Protected) { 'imports/, data/, backups/, evidence/, exports/ y local-certs/ estan ignorados.' } else { 'Una ruta privada no esta ignorada.' })
 
 $PrivateCandidates = @(Get-PhysicalPrivateIPv4 -ProjectRoot $ProjectRoot)
 $PrivateAddresses = @($PrivateCandidates | Select-Object -ExpandProperty IPAddress)
