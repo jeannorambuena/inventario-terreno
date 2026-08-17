@@ -10,7 +10,9 @@ Esta guía permite reconstruir **Inventario Terreno** en un equipo Windows nuevo
 - Git.
 - Node.js 24.x, con npm incluido.
 - Windows PowerShell 5.1 o PowerShell 7.
-- GitHub CLI (`gh`) si se utilizarán los scripts actuales de preparación/verificación o si el repositorio requiere autenticación mediante `gh`.
+- Python 3 disponible para `node-gyp` si una dependencia nativa debe compilarse.
+- Visual Studio Build Tools 2022 con la carga **Desktop development with C++** cuando `better-sqlite3` no disponga de un binario precompilado compatible con la versión de Node utilizada.
+- GitHub CLI (`gh`) sólo si se desea usar autenticación mediante `gh`; no es obligatorio para un clon HTTPS que ya funcione.
 - `mkcert` para la verificación HTTPS completa y el uso móvil con certificado local confiable.
 - Navegador moderno.
 
@@ -18,13 +20,49 @@ Compruebe:
 
 ```powershell
 git --version
-gh --version
 node --version
 npm.cmd --version
-mkcert -version
+python --version
 ```
 
 Node debe ser 24.x.
+
+### 1.1 Build Tools C++ para Windows
+
+En una instalación limpia real de Windows con Node.js 24, `npm.cmd ci` necesitó compilar `better-sqlite3` mediante `node-gyp`. Si el equipo no tiene compilador C++, aparece un error similar a:
+
+```text
+gyp ERR! find VS
+You need to install the latest version of Visual Studio
+including the "Desktop development with C++" workload.
+```
+
+Instale únicamente Visual Studio Build Tools 2022 con la carga C++:
+
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e `
+  --override "--wait --passive --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" `
+  --accept-package-agreements `
+  --accept-source-agreements
+```
+
+Verifique que el compilador x64/x86 quedó instalado:
+
+```powershell
+$vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+& $vswhere `
+  -products * `
+  -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+  -property installationPath
+```
+
+Debe devolver una ruta similar a:
+
+```text
+C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
+```
+
+No instale el IDE completo de Visual Studio si sólo necesita compilar las dependencias del proyecto.
 
 ## 2. Clonar el software
 
@@ -60,12 +98,20 @@ npm.cmd ci
 
 No utilice `npm install` para una instalación reproducible si `package-lock.json` ya existe.
 
+Si `npm.cmd ci` falla con `gyp ERR! find VS`, instale los Build Tools C++ indicados en la sección 1.1 y repita `npm.cmd ci`. No ejecute `npm audit fix --force` para intentar resolver este problema.
+
+Durante la instalación pueden aparecer avisos `deprecated` y un informe de vulnerabilidades transitivas. Consulte la documentación del proyecto antes de aplicar cambios automáticos de dependencias.
+
 Ejecute las pruebas antes de introducir datos reales:
 
 ```powershell
 npm.cmd test
 npm.cmd run test:mobile
+git diff --check
+git status --short
 ```
+
+Una instalación limpia validada debe terminar con todas las pruebas aprobadas y sin modificaciones locales del repositorio.
 
 ## 4. Elegir el tipo de instalación
 
@@ -104,6 +150,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1 `
 ```
 
 Nunca restaure encima de una base existente.
+
+Una restauración operacional completa puede requerir además copiar, por separado y conservando su estructura relativa:
+
+- `evidence/` si existen fotografías/evidencias;
+- `imports/ACTIVOS.xlsx` si se desea conservar la fuente maestra utilizada;
+- `backups/` si se desea conservar el histórico de respaldos;
+- `exports/` si existen salidas operacionales que deban mantenerse.
+
+El comando de restauración SQLite no restaura automáticamente esas carpetas.
 
 ## 5. Datos privados
 
@@ -153,7 +208,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-https.ps
   -InstallLocalCA
 ```
 
-Los certificados se guardan en `local-certs/` y nunca se publican.
+Los certificados se guardan en `local-certs/` y nunca se publican ni se trasladan como parte del paquete de datos. Genérelos de nuevo en el equipo destino.
 
 Consulte [HTTPS-CAMARA.md](HTTPS-CAMARA.md). Aunque el nombre del documento es histórico, la cámara se utiliza actualmente sólo para **evidencia fotográfica**, no para leer códigos.
 
@@ -233,13 +288,17 @@ ok
 
 - [ ] Git instalado.
 - [ ] Node.js 24.x instalado.
-- [ ] GitHub CLI disponible si se usarán los scripts actuales de preparación/verificación.
+- [ ] Python disponible cuando `node-gyp` necesite compilar módulos nativos.
+- [ ] Visual Studio Build Tools 2022 + Desktop development with C++ disponible cuando sea necesario.
+- [ ] GitHub CLI disponible sólo si se usará autenticación mediante `gh`.
 - [ ] Repositorio clonado.
 - [ ] `npm.cmd ci` completado.
 - [ ] `npm.cmd test` aprobado.
 - [ ] `npm.cmd run test:mobile` aprobado.
+- [ ] `git diff --check` aprobado.
 - [ ] Elegido explícitamente `NUEVO` o `RESTAURAR`.
 - [ ] Datos privados trasladados por separado.
+- [ ] Evidencias trasladadas junto con su SQLite cuando corresponda.
 - [ ] SQLite devuelve `integrity_check = ok`.
 - [ ] HTTPS local configurado cuando corresponda.
 - [ ] `Iniciar Inventario Terreno.cmd` funciona por doble clic.
