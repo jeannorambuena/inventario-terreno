@@ -325,14 +325,21 @@ async function registerObservation({ asset = null, provisionalCode = null, statu
 
 function openIncidencePanel() {
   setIncidenceMode(true);
+
+  if (!state.asset && !state.provisionalCode) {
+    showAsset(null, null);
+    document.querySelector('#label-condition').value = 'sin_etiqueta';
+    updateStructuredVisibility();
+    setMessage('Hallazgo sin c?digo. Describa el bien y el sistema generar? un identificador provisional.');
+    return;
+  }
+
   elements.observationForm.hidden = false;
   elements.observationStatus.value = state.asset?.locationId === state.locationId
     ? 'dato_distinto'
     : state.asset ? 'otra_ubicacion' : 'dato_distinto';
   elements.observationForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  setMessage(state.asset || state.provisionalCode
-    ? 'Clasifique la excepción y guarde la incidencia.'
-    : 'Incidencia abierta. Ingrese un código para asociarla al bien correspondiente.');
+  setMessage('Clasifique la excepci?n y guarde la incidencia.');
 }
 
 elements.incidenceMode.addEventListener('click', openIncidencePanel);
@@ -828,11 +835,6 @@ elements.observationForm.addEventListener('change', updateStructuredVisibility);
 
 elements.observationForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (!state.asset && !state.provisionalCode) {
-    setMessage('Ingrese primero el código del bien que presenta la incidencia.', true);
-    elements.lookupCode.focus();
-    return;
-  }
   const details = currentFieldDetails();
   const selections = legacySelections(details);
   const body = new FormData();

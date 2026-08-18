@@ -396,21 +396,26 @@ function startMobilePolling() {
 
 elements.incidenceMode.addEventListener('click', () => {
   setIncidenceMode(true);
-  if (state.lookup) showIncidence(state.lookup);
-  else {
-    elements.observationForm.reset();
-    elements.status.disabled = false;
-    elements.status.value = 'dato_distinto';
-    elements.classification.className = 'classification classification--warning';
-    elements.classification.textContent = 'Incidencia abierta';
-    elements.assetName.textContent = 'Ingrese un código para asociar la incidencia';
-    elements.assetDetails.replaceChildren();
-    elements.matchChoices.replaceChildren();
-    elements.observationForm.hidden = false;
-    elements.resultCard.hidden = false;
-    elements.resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  if (state.lookup) {
+    showIncidence(state.lookup);
+  } else {
+    const lookup = {
+      code: '',
+      asset: null,
+      matches: [],
+      ambiguous: false,
+      classification: 'desconocido',
+      alreadyObserved: false,
+    };
+
+    showIncidence(lookup);
+    document.querySelector('#mobile-label').value = 'sin_etiqueta';
   }
-  message('Clasifique la excepción. Ingrese el código si aún no lo ha hecho.');
+
+  message(state.lookup?.asset
+    ? 'Clasifique la excepci?n.'
+    : 'Hallazgo sin c?digo. Describa el bien y el sistema generar? un identificador provisional.');
 });
 
 elements.cancelIncidence.addEventListener('click', () => {
