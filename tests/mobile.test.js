@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import { openDatabase } from '../src/database/connection.js';
 import { createApp } from '../src/server.js';
 import {
+  createMobileDeviceSuffix,
   createPollingFailureTracker,
   createSafeNetworkError,
   temporaryConnectionMessage,
@@ -80,6 +81,25 @@ async function pair(sessionId) {
   const response = await request(app).post(`/api/sessions/${sessionId}/pair`).expect(201);
   return response.body.pairing;
 }
+
+describe('mobile HTTP runtime compatibility', () => {
+  test('creates device suffix in HTTP runtime without randomUUID', () => {
+    const cryptoWithoutRandomUuid = {
+      getRandomValues(buffer) {
+        buffer.set([0x12, 0x34, 0xab, 0xcd]);
+        return buffer;
+      },
+    };
+
+    expect(createMobileDeviceSuffix(cryptoWithoutRandomUuid))
+      .toBe('1234abcd');
+  });
+
+  test('mobile client does not depend directly on crypto.randomUUID', () => {
+    expect(mobileSource).not.toContain('crypto.randomUUID()');
+    expect(mobileSource).toContain('createMobileDeviceSuffix()');
+  });
+});
 
 describe('mobile integration API', () => {
   test('preserves leading zeros and accepts municipal codes with or without hyphens', async () => {

@@ -1,4 +1,5 @@
 import {
+  createMobileDeviceSuffix,
   createPollingFailureTracker,
   createSafeNetworkError,
   isIntentionalAbort,
@@ -56,12 +57,26 @@ const state = {
 };
 
 const mobileDeviceKey = 'inventario-terreno.mobileDeviceId';
+
 function getMobileDeviceCode() {
-  let value = localStorage.getItem(mobileDeviceKey);
-  if (!value) {
-    value = `MOVIL-${crypto.randomUUID().slice(0, 8)}`;
-    localStorage.setItem(mobileDeviceKey, value);
+  let value = '';
+
+  try {
+    value = localStorage.getItem(mobileDeviceKey) || '';
+  } catch {
+    // localStorage may be unavailable in some mobile browser modes.
   }
+
+  if (!value) {
+    value = `MOVIL-${createMobileDeviceSuffix()}`;
+
+    try {
+      localStorage.setItem(mobileDeviceKey, value);
+    } catch {
+      // The identifier is still valid for the current operation.
+    }
+  }
+
   return value;
 }
 
@@ -93,6 +108,7 @@ async function api(path, options = {}, retries = 2) {
   const { silentNetwork = false, ...fetchOptions } = options;
   const hasFormData = fetchOptions.body instanceof FormData;
   let lastError;
+
   for (let attempt = 0; attempt <= retries; attempt += 1) {
     try {
       const response = await fetch(path, {
@@ -103,24 +119,57 @@ async function api(path, options = {}, retries = 2) {
           ...(fetchOptions.headers ?? {}),
         },
       });
-      const body = await response.json();
+
+      const raw = await response.text();
+      let body = {};
+
+      if (raw) {
+        try {
+          body = JSON.parse(raw);
+        } catch {
+          body = { raw };
+        }
+      }
+
       if (!response.ok) {
-        const error = new Error(body.error || 'No fue posible completar la operación.');
+        let fallbackMessage = `El servidor rechaz? la operaci?n (HTTP ${response.status}).`;
+
+        if (response.status === 413) {
+          fallbackMessage = 'La fotograf?a supera el tama?o m?ximo permitido de 8 MB.';
+        } else if (response.status === 400) {
+          fallbackMessage = 'El servidor rechaz? los datos enviados. Revise los campos obligatorios.';
+        } else if (response.status >= 500) {
+          fallbackMessage = `Error interno del servidor (HTTP ${response.status}).`;
+        }
+
+        const serverMessage =
+          typeof body.error === 'string' && body.error.trim()
+            ? body.error.trim()
+            : '';
+
+        const error = new Error(serverMessage || fallbackMessage);
         error.status = response.status;
         error.body = body;
         throw error;
       }
+
       if (!silentNetwork) setNetworkState('Conectado');
       return body;
     } catch (error) {
       lastError = error;
-      if (error.status === 401 || error.status === 403 || error.status === 410 || isIntentionalAbort(error)) break;
-      if (!silentNetwork) setNetworkState('Reconectando…');
+
+      // Una respuesta HTTP v?lida no es una ca?da de red.
+      if (error.status) break;
+      if (isIntentionalAbort(error)) break;
+
+      if (!silentNetwork) setNetworkState('Reconectando?');
       if (attempt < retries) await wait(600 * (attempt + 1));
     }
   }
-  if (lastError?.status === 401 || lastError?.status === 403 || lastError?.status === 410 || isIntentionalAbort(lastError)) throw lastError;
-  if (!silentNetwork) setNetworkState('Sin conexión');
+
+  if (lastError?.status || isIntentionalAbort(lastError)) throw lastError;
+
+  if (!silentNetwork) setNetworkState('Sin conexi?n');
   throw createSafeNetworkError();
 }
 
@@ -521,45 +570,221 @@ elements.lookupForm.addEventListener('submit', async (event) => {
   }
 });
 
+function validateMobileIncidence(details) {
+  const errors = [];
+  const add = (message, element) => errors.push({ message, element });
+
+  const noMasterAsset = !state.lookup?.asset;
+
+  if (noMasterAsset && !details.situations.includes('bien_no_registrado')) {
+    add(
+      'Marque "Bien no registrado" para un hallazgo que no pudo asociarse al inventario maestro.',
+      elements.observationForm.querySelector('input[name="situation"][value="bien_no_registrado"]'),
+    );
+  }
+
+  if (noMasterAsset && !details.provisional.description.trim()) {
+    add(
+      'Ingrese una descripci?n del bien adicional.',
+      document.querySelector('#mobile-provisional-description'),
+    );
+  }
+
+  if (!details.physicalPoint.type) {
+    add(
+      'Seleccione el punto f?sico donde se encontr? el bien.',
+      document.querySelector('#mobile-point'),
+    );
+  }
+
+  if (details.physicalPoint.type === 'otro' && !details.physicalPoint.reference.trim()) {
+    add(
+      'Especifique la referencia del punto f?sico.',
+      document.querySelector('#mobile-point-reference'),
+    );
+  }
+
+  if (
+    details.situations.includes('requiere_revision')
+    && !details.review.reason
+  ) {
+    add(
+      'Seleccione el motivo de la revisi?n pendiente.',
+      document.querySelector('#mobile-review-reason'),
+    );
+  }
+
+  if (
+    details.physicalCondition === 'incompleto'
+    && details.incomplete.parts.length === 0
+  ) {
+    add(
+      'Indique qu? componente falta.',
+      document.querySelector('#mobile-incomplete-part'),
+    );
+  }
+
+  const needsCustody = details.situations.some((value) =>
+    ['en_reparacion', 'prestamo_informado', 'traslado_no_regularizado'].includes(value)
+  );
+
+  if (needsCustody && !details.custody.destination.trim()) {
+    add(
+      'Indique destino, unidad o persona relacionada con el bien.',
+      document.querySelector('#mobile-custody-destination'),
+    );
+  }
+
+  if (needsCustody && !details.custody.basis) {
+    add(
+      'Indique si la informaci?n fue informada o verificada.',
+      document.querySelector('#mobile-custody-basis'),
+    );
+  }
+
+  if (
+    noMasterAsset
+    && !state.evidenceQueue.some(({ type }) => type === 'bien_completo')
+  ) {
+    add(
+      'Este hallazgo sin c?digo requiere una fotograf?a de tipo "Bien completo".',
+      elements.addEvidence,
+    );
+  }
+
+  for (const { file } of state.evidenceQueue) {
+    if (file.size > 8 * 1024 * 1024) {
+      add(
+        `La fotograf?a ${file.name} supera el m?ximo de 8 MB. Tome otra fotograf?a con menor tama?o.`,
+        elements.addEvidence,
+      );
+      break;
+    }
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      add(
+        `La fotograf?a ${file.name} no tiene un formato admitido. Use JPEG, PNG o WebP.`,
+        elements.addEvidence,
+      );
+      break;
+    }
+  }
+
+  return errors;
+}
+
+function showMobileValidationError(error) {
+  message(error.message, true);
+
+  if (error.element) {
+    error.element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    if (
+      typeof error.element.focus === 'function'
+      && !error.element.disabled
+    ) {
+      error.element.focus({ preventScroll: true });
+    }
+  }
+}
+
 elements.observationForm.addEventListener('submit', async (event) => {
   event.preventDefault();
+
+  if (state.registrationInProgress) return;
+
   if (!state.lookup) {
-    message('Ingrese primero el código del bien que presenta la incidencia.', true);
-    elements.code.focus();
+    message('No hay un bien o hallazgo activo para registrar.', true);
     return;
   }
+
+  const submitButton = elements.observationForm.querySelector('button[type="submit"]');
+
+  message('Validando incidencia?');
+
   const details = mobileFieldDetails();
+
+
+  const validationErrors = validateMobileIncidence(details);
+
+  if (validationErrors.length > 0) {
+    showMobileValidationError(validationErrors[0]);
+    return;
+  }
+
   const selections = mobileLegacySelections(details);
   const body = new FormData();
-  if (state.lookup.asset) body.append('assetId', String(state.lookup.asset.id));
+
+  if (state.lookup.asset) {
+    body.append('assetId', String(state.lookup.asset.id));
+  }
+
   body.append('status', elements.status.value);
   body.append('identification', JSON.stringify(selections.identification));
   body.append('physical', JSON.stringify(selections.physical));
   body.append('situation', JSON.stringify(selections.situation));
   body.append('details', JSON.stringify(details));
   body.append('deviceCode', getMobileDeviceCode());
+
   const firstEvidence = state.evidenceQueue[0];
+
   if (firstEvidence) {
     body.append('evidenceType', firstEvidence.type);
     body.append('evidence', firstEvidence.file);
   }
+
+  state.registrationInProgress = true;
+  submitButton.disabled = true;
+  setButtonContent(submitButton, 'check', 'Guardando?');
+  message('Guardando incidencia?');
+
   try {
     const lookup = state.lookup;
-    const result = await api(`/api/sessions/${sessionId}/mobile-incidences`, {
-      method: 'POST',
-      body,
-    }, 0);
-    if (state.evidenceQueue.length > 1) await uploadMobileEvidence(result.observation.id, state.evidenceQueue.slice(1));
+
+    const result = await api(
+      `/api/sessions/${sessionId}/mobile-incidences`,
+      {
+        method: 'POST',
+        body,
+      },
+      0,
+    );
+
+    if (state.evidenceQueue.length > 1) {
+      await uploadMobileEvidence(
+        result.observation.id,
+        state.evidenceQueue.slice(1),
+      );
+    }
+
+    const registeredCode =
+      result.observation.provisionalCode
+      || lookup.asset?.assetCode
+      || lookup.code
+      || 'Sin c?digo';
+
     renderSummary(result.summary);
+
     renderLastRecord({
-      code: lookup.asset?.assetCode || lookup.code,
-      name: lookup.asset?.name || 'Bien no encontrado en el inventario maestro',
+      code: registeredCode,
+      name:
+        lookup.asset?.name
+        || details.provisional.description
+        || 'Bien f?sico no registrado',
       result: 'Incidencia registrada',
     });
+
     resetEntryFlow();
-    message('Incidencia guardada. Listo para el siguiente código.');
+
+    message(
+      `Incidencia guardada correctamente: ${registeredCode}. Listo para continuar.`,
+    );
   } catch (error) {
     handleMobileError(error);
+  } finally {
+    state.registrationInProgress = false;
+    submitButton.disabled = false;
+    setButtonContent(submitButton, 'check', 'Guardar incidencia');
   }
 });
 

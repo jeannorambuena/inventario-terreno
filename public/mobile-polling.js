@@ -1,5 +1,22 @@
 export const temporaryConnectionMessage = 'Conexión temporalmente interrumpida. Intentando reconectar…';
 
+export function createMobileDeviceSuffix(cryptoApi = globalThis.crypto) {
+  if (typeof cryptoApi?.randomUUID === 'function') {
+    return cryptoApi.randomUUID().slice(0, 8);
+  }
+
+  if (typeof cryptoApi?.getRandomValues === 'function') {
+    const bytes = new Uint8Array(4);
+    cryptoApi.getRandomValues(bytes);
+    return [...bytes]
+      .map((byte) => byte.toString(16).padStart(2, '0'))
+      .join('');
+  }
+
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+    .slice(0, 12);
+}
+
 export function isIntentionalAbort(error) {
   return error?.name === 'AbortError';
 }
