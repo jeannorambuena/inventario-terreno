@@ -745,6 +745,7 @@ function emptySectionMetrics(expected) {
     pendientes: expected,
     incidencias: 0,
     diferenciasUbicacion: 0,
+    hallazgosProvisionales: 0,
     noRegistrados: 0,
     propuestasBaja: 0,
     pendientesRevision: 0,
@@ -754,8 +755,8 @@ function emptySectionMetrics(expected) {
 function aggregateMetrics(target, source) {
   for (const field of [
     'bienesEsperados', 'bienesEsperadosRevisados', 'bienesConformes', 'pendientes',
-    'incidencias', 'diferenciasUbicacion', 'noRegistrados', 'propuestasBaja',
-    'pendientesRevision',
+    'incidencias', 'diferenciasUbicacion', 'hallazgosProvisionales',
+    'noRegistrados', 'propuestasBaja', 'pendientesRevision',
   ]) target[field] += Number(source[field]) || 0;
   target.porcentajeRevision = target.bienesEsperados === 0
     ? 0

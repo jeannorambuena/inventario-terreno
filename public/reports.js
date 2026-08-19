@@ -801,7 +801,9 @@ function executiveMetricSet(metrics = {}) {
     number(metrics.incidencias);
 
   const findings =
-    number(metrics.noRegistrados);
+    number(
+      metrics.hallazgosProvisionales,
+    );
 
   const pending =
     number(metrics.pendientes);
@@ -844,6 +846,7 @@ function aggregateExecutiveMetrics(
     'pendientes',
     'incidencias',
     'diferenciasUbicacion',
+    'hallazgosProvisionales',
     'noRegistrados',
     'propuestasBaja',
     'pendientesRevision',
@@ -1764,9 +1767,9 @@ function renderDashboardPriorities(overview) {
 
   appendUnitStatus(
     'Hallazgos adicionales',
-    overall.noRegistrados,
-    'No pertenecen al maestro esperado',
-    number(overall.noRegistrados) > 0
+    overall.hallazgosProvisionales,
+    'Objetos fisicos adicionales al maestro esperado',
+    number(overall.hallazgosProvisionales) > 0
       ? 'finding'
       : 'success',
   );
@@ -1777,7 +1780,7 @@ function renderDashboardPriorities(overview) {
         (section) =>
           section.state !== 'sin_iniciar'
           || number(section.incidencias) > 0
-          || number(section.noRegistrados) > 0,
+          || number(section.hallazgosProvisionales) > 0,
       )
       .map(
         (section) => ({
@@ -1792,8 +1795,8 @@ function renderDashboardPriorities(overview) {
             - a.operationalPriority.rank
           || number(b.incidencias)
             - number(a.incidencias)
-          || number(b.noRegistrados)
-            - number(a.noRegistrados)
+          || number(b.hallazgosProvisionales)
+            - number(a.hallazgosProvisionales)
           || number(b.pendientes)
             - number(a.pendientes),
       )
@@ -1885,7 +1888,7 @@ function renderDashboardPriorities(overview) {
       document.createElement('strong');
 
     findingStrong.textContent =
-      dashboardNumber(section.noRegistrados);
+      dashboardNumber(section.hallazgosProvisionales);
 
     const findingSmall =
       document.createElement('small');
@@ -1979,7 +1982,9 @@ function renderDashboard(overview) {
     number(metrics.pendientes);
 
   const findings =
-    number(metrics.noRegistrados);
+    number(
+      metrics.hallazgosProvisionales,
+    );
 
   const reviewPercent =
     number(metrics.porcentajeRevision);
@@ -2038,7 +2043,7 @@ function renderDashboard(overview) {
     {
       label: 'Hallazgos adicionales',
       value: dashboardNumber(findings),
-      meta: 'No registrados en el maestro',
+      meta: 'Objetos fisicos adicionales al universo esperado',
       tone: 'finding',
     },
   ];
@@ -2386,9 +2391,9 @@ function renderExplorerMetrics(section) {
     {
       label: 'Hallazgos adicionales',
       value: dashboardNumber(
-        section.noRegistrados,
+        section.hallazgosProvisionales,
       ),
-      meta: 'Fuera del maestro',
+      meta: 'Objetos fisicos adicionales',
       tone: 'finding',
     },
   ];
@@ -4450,7 +4455,7 @@ function renderExplorerSummary(
     [
       'Hallazgos adicionales',
       dashboardNumber(
-        section.noRegistrados,
+        section.hallazgosProvisionales,
       ),
     ],
   ]) {
@@ -5809,6 +5814,11 @@ function renderOverview(overview) {
     ['Pendientes de verificar', number(metrics.pendientes), 'warning'],
     ['Incidencias', number(metrics.incidencias), 'warning'],
     ['Otra ubicación', number(metrics.diferenciasUbicacion)],
+    [
+      'Hallazgos adicionales',
+      number(metrics.hallazgosProvisionales),
+      'warning',
+    ],
     ['No registrados', number(metrics.noRegistrados), 'danger'],
     ['Propuestas de baja', number(metrics.propuestasBaja)],
     ['Pendientes de revisión', number(metrics.pendientesRevision)],
@@ -5879,6 +5889,11 @@ function renderExecutive(report) {
   renderMetrics(elements.executiveResults, [
     ['Conformes', number(summary.bienesConformes), 'success'],
     ['Otra ubicación', number(summary.diferenciasUbicacion), 'warning'],
+    [
+      'Hallazgos adicionales',
+      number(summary.hallazgosProvisionales),
+      'warning',
+    ],
     ['No registrados', number(summary.noRegistrados), 'danger'],
     ['Incidencias', number(summary.incidencias), 'warning'],
   ]);
@@ -5920,6 +5935,10 @@ function renderCloseReport(summary) {
     ['Pendientes de verificar', summary.pendientes],
     ['No encontrados durante la inspección', summary.noUbicados],
     ['Encontrados en otra ubicación', summary.diferenciasUbicacion],
+    [
+      'Hallazgos fisicos adicionales',
+      summary.hallazgosProvisionales,
+    ],
     ['Bienes no registrados', summary.noRegistrados],
     ['Incidencias', summary.incidencias],
     ['Problemas de etiqueta', summary.problemasEtiqueta],
