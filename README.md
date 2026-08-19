@@ -57,6 +57,8 @@ Una oficina no puede cerrarse normalmente mientras queden bienes pendientes, amb
 - Terminal móvil sincronizado con token temporal.
 - Cierre de oficina controlado por servidor.
 - Informes de avance, incidencias, cierre y regularización.
+- Expediente de auditoría reproducible con manifiesto SHA-256.
+- Respaldo operacional verificable de SQLite + evidencia.
 - Inicio y detención mediante doble clic en Windows.
 
 ## Tecnología
@@ -217,3 +219,26 @@ Principio:
 > No abandonar una oficina hasta que el sistema indique que el levantamiento contiene información suficiente para continuar la conciliación sin depender de la memoria.
 
 Guía completa: [docs/OPERACION-TERRENO.md](docs/OPERACION-TERRENO.md).
+
+## Piloto, preflight y Release 1.0
+
+El cierre técnico incorpora una verificación automática de readiness:
+
+```powershell
+npm.cmd run release:check
+```
+
+Antes del piloto real y antes de liberar una versión se utiliza:
+
+```powershell
+npm.cmd run pilot:preflight
+```
+
+Ese comando encadena pruebas, integridad operacional, creación de respaldo, verificación del respaldo y readiness de release. Cualquier fallo detiene la aceptación.
+
+Documentación de cierre:
+
+- [Aceptación del piloto](docs/ACEPTACION-PILOTO.md).
+- [Operación diaria](docs/OPERACION-DIARIA.md).
+- [Checklist y congelamiento Release 1.0](docs/RELEASE-1.0.md).
+- [Respaldo y restauración](docs/RESPALDO-RESTAURACION.md).
