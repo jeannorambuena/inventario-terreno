@@ -33,6 +33,12 @@ const elements = {
   assetDialogSubtitle: document.querySelector('#asset-dialog-subtitle'),
   assetDialogContent: document.querySelector('#asset-dialog-content'),
   closeAssetDialog: document.querySelector('#close-asset-dialog'),
+  explorerIncidenceMatrix: document.querySelector('#explorer-incidence-matrix'),
+  explorerIntegritySummary: document.querySelector('#explorer-integrity-summary'),
+  explorerPhysical: document.querySelector('#explorer-physical'),
+  explorerPhysicalCount: document.querySelector('#explorer-physical-count'),
+  explorerSummarySheet: document.querySelector('#explorer-summary-sheet'),
+  printSectionSummary: document.querySelector('#print-section-summary'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -800,6 +806,627 @@ function explorerOutcome(observation) {
     tone: 'neutral',
     color: '#a7aaa3',
   };
+}
+
+
+function countIncidenceFlag(
+  incidences,
+  flag,
+) {
+  return incidences.filter(
+    (incidence) =>
+      Boolean(incidence.flags?.[flag]),
+  ).length;
+}
+
+function appendIncidenceMetric(
+  container,
+  label,
+  count,
+  total,
+  tone = 'neutral',
+) {
+  const row = document.createElement('article');
+
+  row.className =
+    `explorer-incidence-metric `
+    + `explorer-incidence-metric--${tone}`;
+
+  const copy = document.createElement('div');
+
+  const name = document.createElement('span');
+  name.textContent = label;
+
+  const detail = document.createElement('small');
+
+  const percent =
+    total > 0
+      ? Math.round((count / total) * 100)
+      : 0;
+
+  detail.textContent =
+    `${percent}% de las incidencias`;
+
+  copy.append(
+    name,
+    detail,
+  );
+
+  const strong = document.createElement('strong');
+  strong.textContent = String(count);
+
+  row.append(
+    copy,
+    strong,
+  );
+
+  container.append(row);
+}
+
+function renderExplorerIncidenceMatrix(report) {
+  elements.explorerIncidenceMatrix.replaceChildren();
+
+  const incidences =
+    report?.incidences || [];
+
+  const total = incidences.length;
+
+  const metrics = [
+    [
+      'Sin etiqueta',
+      'sin_etiqueta',
+      'warning',
+    ],
+    [
+      'Datos no coinciden',
+      'datos_no_coinciden',
+      'warning',
+    ],
+    [
+      'Otra ubicacion',
+      'otra_ubicacion',
+      'info',
+    ],
+    [
+      'Bien no registrado',
+      'bien_no_registrado',
+      'finding',
+    ],
+    [
+      'No operativo',
+      'no_operativo',
+      'danger',
+    ],
+    [
+      'Estado malo',
+      'malo',
+      'danger',
+    ],
+    [
+      'Propuesta de baja',
+      'propuesta_baja',
+      'danger',
+    ],
+    [
+      'Pendiente identificar',
+      'pendiente_identificar',
+      'warning',
+    ],
+    [
+      'Requiere revision',
+      'requiere_revision',
+      'warning',
+    ],
+    [
+      'Con fotografia',
+      'con_fotografia',
+      'success',
+    ],
+  ];
+
+  for (const [
+    label,
+    flag,
+    tone,
+  ] of metrics) {
+    appendIncidenceMetric(
+      elements.explorerIncidenceMatrix,
+      label,
+      countIncidenceFlag(
+        incidences,
+        flag,
+      ),
+      total,
+      tone,
+    );
+  }
+
+  if (total === 0) {
+    const empty = document.createElement('p');
+
+    empty.className = 'empty-report';
+
+    empty.textContent =
+      'No existen incidencias vigentes en esta seccion.';
+
+    elements.explorerIncidenceMatrix.append(empty);
+  }
+
+  renderExplorerIntegrity(report);
+}
+
+function renderExplorerIntegrity(report) {
+  elements.explorerIntegritySummary.replaceChildren();
+
+  const incidences =
+    report?.incidences || [];
+
+  const withEvidence =
+    incidences.filter(
+      ({ evidenceCount }) =>
+        number(evidenceCount) > 0,
+    ).length;
+
+  const unavailable =
+    incidences.filter(
+      ({ evidenceComplete }) =>
+        evidenceComplete === false,
+    ).length;
+
+  const corrections =
+    number(report?.corrections);
+
+  const annulments =
+    number(report?.annulments);
+
+  const metrics = [
+    [
+      'Incidencias vigentes',
+      incidences.length,
+      'Estado actual',
+    ],
+    [
+      'Con evidencia',
+      withEvidence,
+      incidences.length
+        ? `${Math.round(
+          (withEvidence / incidences.length) * 100,
+        )}%`
+        : '0%',
+    ],
+    [
+      'Evidencia no disponible',
+      unavailable,
+      unavailable
+        ? 'Requiere revision'
+        : 'Sin alertas',
+    ],
+    [
+      'Correcciones auditadas',
+      corrections,
+      'Historial conservado',
+    ],
+    [
+      'Anulaciones auditadas',
+      annulments,
+      'No cuentan como bienes vigentes',
+    ],
+  ];
+
+  for (const [
+    label,
+    value,
+    detail,
+  ] of metrics) {
+    const row = document.createElement('article');
+    row.className = 'explorer-integrity-item';
+
+    const copy = document.createElement('div');
+
+    const title = document.createElement('span');
+    title.textContent = label;
+
+    const small = document.createElement('small');
+    small.textContent = detail;
+
+    copy.append(
+      title,
+      small,
+    );
+
+    const strong = document.createElement('strong');
+    strong.textContent = String(value);
+
+    row.append(
+      copy,
+      strong,
+    );
+
+    elements.explorerIntegritySummary.append(row);
+  }
+}
+
+function physicalEvidenceFor(
+  observation,
+  report,
+) {
+  if (!observation) return [];
+
+  const incidence = (
+    report?.incidences || []
+  ).find(
+    (item) =>
+      number(item.id)
+      === number(observation.id),
+  );
+
+  return incidence?.evidence || [];
+}
+
+function renderExplorerPhysical(
+  assets,
+  observations,
+  report,
+) {
+  elements.explorerPhysical.replaceChildren();
+
+  const byAsset = new Map(
+    observations
+      .filter(({ assetId }) => assetId)
+      .map(
+        (observation) => [
+          number(observation.assetId),
+          observation,
+        ],
+      ),
+  );
+
+  const cards = [];
+
+  for (const asset of assets) {
+    cards.push({
+      kind: 'expected',
+      asset,
+      observation:
+        byAsset.get(number(asset.id)) || null,
+    });
+  }
+
+  for (const observation of observations) {
+    if (observation.assetId) continue;
+
+    cards.push({
+      kind: 'finding',
+      asset: null,
+      observation,
+    });
+  }
+
+  elements.explorerPhysicalCount.textContent =
+    String(cards.length);
+
+  for (const item of cards) {
+    const card = document.createElement('article');
+
+    card.className =
+      `physical-card physical-card--${item.kind}`;
+
+    const observation =
+      item.observation;
+
+    const evidence =
+      physicalEvidenceFor(
+        observation,
+        report,
+      );
+
+    const imageArea = document.createElement('div');
+    imageArea.className = 'physical-card__image';
+
+    if (evidence.length > 0) {
+      const image = document.createElement('img');
+
+      image.src = evidence[0].url;
+      image.alt =
+        item.asset?.name
+        || observation?.details?.provisional?.description
+        || 'Bien registrado';
+
+      image.loading = 'lazy';
+
+      imageArea.append(image);
+
+    } else {
+      const placeholder =
+        document.createElement('div');
+
+      placeholder.className =
+        'physical-card__placeholder';
+
+      placeholder.textContent =
+        observation
+          ? 'Sin fotografia requerida o disponible'
+          : 'Pendiente de inspeccion';
+
+      imageArea.append(placeholder);
+    }
+
+    const body = document.createElement('div');
+    body.className = 'physical-card__body';
+
+    const code = document.createElement('span');
+    code.className = 'physical-card__code';
+
+    code.textContent =
+      item.asset?.assetCode
+      || observation?.provisionalCode
+      || 'Sin codigo';
+
+    const heading = document.createElement('strong');
+
+    heading.textContent =
+      item.asset?.name
+      || observation?.details?.provisional?.description
+      || 'Bien fisico no registrado';
+
+    const state = createExplorerStateBadge(
+      observationStateLabel(observation),
+      observationTone(observation),
+    );
+
+    const meta = document.createElement('small');
+
+    meta.textContent =
+      observation
+        ? (
+          `${fieldConditionLabel(
+            observation.details?.physicalCondition,
+          )} ? `
+          + functionalityLabel(
+            observation.details?.functionality,
+          )
+        )
+        : 'Sin inspeccion de terreno';
+
+    body.append(
+      code,
+      heading,
+      state,
+      meta,
+    );
+
+    if (item.asset) {
+      const button =
+        document.createElement('button');
+
+      button.type = 'button';
+      button.className = 'secondary';
+      button.textContent = 'Ver ficha';
+
+      button.addEventListener(
+        'click',
+        () => openAssetDossier(
+          item.asset,
+          observation,
+        ),
+      );
+
+      body.append(button);
+
+    } else {
+      const incidence = (
+        report?.incidences || []
+      ).find(
+        ({ id }) =>
+          number(id)
+          === number(observation.id),
+      );
+
+      if (incidence) {
+        const button =
+          document.createElement('button');
+
+        button.type = 'button';
+        button.className = 'secondary';
+        button.textContent = 'Ver hallazgo';
+
+        button.addEventListener(
+          'click',
+          () => openIncidence(
+            incidence.id,
+            state.explorerSessionId,
+          ),
+        );
+
+        body.append(button);
+      }
+    }
+
+    card.append(
+      imageArea,
+      body,
+    );
+
+    elements.explorerPhysical.append(card);
+  }
+
+  if (cards.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-report';
+    empty.textContent =
+      'Esta seccion no contiene bienes para mostrar.';
+
+    elements.explorerPhysical.append(empty);
+  }
+}
+
+function appendSummaryMetric(
+  container,
+  label,
+  value,
+) {
+  const item = document.createElement('div');
+
+  const span = document.createElement('span');
+  span.textContent = label;
+
+  const strong = document.createElement('strong');
+  strong.textContent = value;
+
+  item.append(
+    span,
+    strong,
+  );
+
+  container.append(item);
+}
+
+function renderExplorerSummary(
+  section,
+  observations,
+  report,
+) {
+  elements.explorerSummarySheet.replaceChildren();
+
+  if (!section) return;
+
+  const title = document.createElement('div');
+  title.className = 'section-summary__title';
+
+  const kicker = document.createElement('span');
+  kicker.textContent =
+    'INVENTARIO FISICO MUNICIPAL';
+
+  const heading = document.createElement('h3');
+  heading.textContent =
+    section.section || 'Seccion';
+
+  const location = document.createElement('p');
+
+  location.textContent =
+    `${section.directionName} / `
+    + `${section.departmentName}`;
+
+  title.append(
+    kicker,
+    heading,
+    location,
+  );
+
+  const metrics = document.createElement('div');
+  metrics.className = 'section-summary__metrics';
+
+  for (const [
+    label,
+    value,
+  ] of [
+    [
+      'Esperados',
+      dashboardNumber(
+        section.bienesEsperados,
+      ),
+    ],
+    [
+      'Revisados',
+      dashboardNumber(
+        section.bienesEsperadosRevisados,
+      ),
+    ],
+    [
+      'Conformes',
+      dashboardNumber(
+        section.bienesConformes,
+      ),
+    ],
+    [
+      'Incidencias',
+      dashboardNumber(
+        section.incidencias,
+      ),
+    ],
+    [
+      'Pendientes',
+      dashboardNumber(
+        section.pendientes,
+      ),
+    ],
+    [
+      'Hallazgos adicionales',
+      dashboardNumber(
+        section.noRegistrados,
+      ),
+    ],
+  ]) {
+    appendSummaryMetric(
+      metrics,
+      label,
+      value,
+    );
+  }
+
+  const text = document.createElement('div');
+  text.className = 'section-summary__text';
+
+  const coverage = document.createElement('p');
+
+  coverage.textContent =
+    `Cobertura del levantamiento: `
+    + `${number(section.porcentajeRevision)}%.`;
+
+  const current = document.createElement('p');
+
+  current.textContent =
+    `Registros vigentes de terreno: `
+    + `${observations.length}.`;
+
+  const evidenceCount = (
+    report?.incidences || []
+  ).reduce(
+    (sum, incidence) =>
+      sum + number(incidence.evidenceCount),
+    0,
+  );
+
+  const evidence = document.createElement('p');
+
+  evidence.textContent =
+    `Evidencias fotograficas vigentes: `
+    + `${evidenceCount}.`;
+
+  const disclaimer = document.createElement('p');
+
+  disclaimer.className =
+    'report-disclaimer';
+
+  disclaimer.textContent =
+    'Los hallazgos e incidencias describen lo observado '
+    + 'en terreno. Este resumen no modifica por si solo '
+    + 'el inventario maestro ni constituye regularizacion '
+    + 'administrativa.';
+
+  text.append(
+    coverage,
+    current,
+    evidence,
+    disclaimer,
+  );
+
+  const cutoff = document.createElement('small');
+
+  cutoff.className = 'section-summary__cutoff';
+
+  cutoff.textContent =
+    `Corte: ${dateTime(
+      report?.generatedAt
+      || state.overview?.generatedAt,
+    )}`;
+
+  elements.explorerSummarySheet.append(
+    title,
+    metrics,
+    text,
+    cutoff,
+  );
 }
 
 function renderExplorerAnalytics(
@@ -1641,6 +2268,22 @@ async function refreshExplorerSection({
       observations,
     );
 
+    renderExplorerIncidenceMatrix(
+      report,
+    );
+
+    renderExplorerPhysical(
+      assets,
+      observations,
+      report,
+    );
+
+    renderExplorerSummary(
+      section,
+      observations,
+      report,
+    );
+
     elements.explorerBreadcrumb.textContent =
       `${section.directionName} / `
       + `${section.departmentName} / `
@@ -2279,6 +2922,27 @@ elements.presentationMode.addEventListener(
       active
         ? 'Salir de presentacion'
         : 'Presentar avance';
+  },
+);
+
+
+elements.printSectionSummary.addEventListener(
+  'click',
+  () => {
+    document.body.classList.add(
+      'print-section-summary',
+    );
+
+    window.print();
+
+    window.setTimeout(
+      () => {
+        document.body.classList.remove(
+          'print-section-summary',
+        );
+      },
+      250,
+    );
   },
 );
 
