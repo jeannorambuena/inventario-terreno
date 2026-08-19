@@ -8,7 +8,7 @@
     "backup": "node src/database/backup.js",
     "import": "node src/importer/run-import.js",
     "start": "node src/server.js",
-    "test": "vitest run",
+    "test": "vitest run --pool=threads --maxWorkers=1",
     "test:mobile": "vitest run tests/mobile.test.js",
     "test:watch": "vitest",
     "verify:field": "node scripts/verify-field-integrity.js"

@@ -149,6 +149,103 @@
         </section>
 
 
+        <section id="executive-query"
+          class="executive-query no-print"
+          aria-labelledby="executive-query-title">
+
+          <div class="executive-query__header">
+            <div>
+              <p class="section-kicker">
+                CONSULTA EJECUTIVA
+              </p>
+
+              <h2 id="executive-query-title">
+                &iquest;Qu&eacute; avance tiene una unidad?
+              </h2>
+
+              <p>
+                Consulte el estado del inventario por municipio,
+                direcci&oacute;n, departamento o secci&oacute;n.
+              </p>
+            </div>
+
+            <span id="executive-query-cutoff"
+              class="explorer-status">
+              Esperando datos
+            </span>
+          </div>
+
+          <div class="executive-query__filters">
+
+            <label>
+              Nivel
+              <select id="executive-query-level">
+                <option value="municipality">
+                  Municipio completo
+                </option>
+
+                <option value="direction">
+                  Direcci&oacute;n
+                </option>
+
+                <option value="department">
+                  Departamento
+                </option>
+
+                <option value="section">
+                  Secci&oacute;n
+                </option>
+              </select>
+            </label>
+
+            <label id="executive-query-unit-wrap" hidden>
+              Unidad
+              <select id="executive-query-unit">
+                <option value="">
+                  Seleccione&hellip;
+                </option>
+              </select>
+            </label>
+
+          </div>
+
+          <div id="executive-query-result"
+            class="executive-query__result">
+          </div>
+
+          <div class="executive-query__lower">
+
+            <article class="executive-query-card">
+              <header>
+                <p class="section-kicker">
+                  INTERPRETACI&Oacute;N
+                </p>
+                <h3>Indicadores de gesti&oacute;n</h3>
+              </header>
+
+              <div id="executive-query-indicators"
+                class="executive-indicators">
+              </div>
+            </article>
+
+            <article class="executive-query-card">
+              <header>
+                <p class="section-kicker">
+                  COMPARACI&Oacute;N
+                </p>
+                <h3 id="executive-query-ranking-title">
+                  Unidades dependientes
+                </h3>
+              </header>
+
+              <div id="executive-query-ranking"
+                class="executive-query-ranking">
+              </div>
+            </article>
+
+          </div>
+        </section>
+
         <section id="dashboard-priorities"
           class="dashboard-priorities no-print"
           aria-labelledby="dashboard-priorities-title">

@@ -43,6 +43,14 @@ const elements = {
   dashboardPriorityList: document.querySelector('#dashboard-priority-list'),
   exportSectionCsv: document.querySelector('#export-section-csv'),
   printPhysicalView: document.querySelector('#print-physical-view'),
+  executiveQueryLevel: document.querySelector('#executive-query-level'),
+  executiveQueryUnitWrap: document.querySelector('#executive-query-unit-wrap'),
+  executiveQueryUnit: document.querySelector('#executive-query-unit'),
+  executiveQueryCutoff: document.querySelector('#executive-query-cutoff'),
+  executiveQueryResult: document.querySelector('#executive-query-result'),
+  executiveQueryIndicators: document.querySelector('#executive-query-indicators'),
+  executiveQueryRanking: document.querySelector('#executive-query-ranking'),
+  executiveQueryRankingTitle: document.querySelector('#executive-query-ranking-title'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -323,6 +331,756 @@ function renderDashboardDirections(directions) {
   }
 }
 
+
+
+function executiveMetricSet(metrics = {}) {
+  const expected =
+    number(metrics.bienesEsperados);
+
+  const reviewed =
+    number(metrics.bienesEsperadosRevisados);
+
+  const conforming =
+    number(metrics.bienesConformes);
+
+  const incidences =
+    number(metrics.incidencias);
+
+  const findings =
+    number(metrics.noRegistrados);
+
+  const pending =
+    number(metrics.pendientes);
+
+  return {
+    expected,
+    reviewed,
+    conforming,
+    incidences,
+    findings,
+    pending,
+
+    coverage:
+      dashboardPercent(
+        reviewed,
+        expected,
+      ),
+
+    conformity:
+      dashboardPercent(
+        conforming,
+        reviewed,
+      ),
+
+    incidenceRate:
+      dashboardPercent(
+        incidences,
+        reviewed,
+      ),
+  };
+}
+
+function aggregateExecutiveMetrics(
+  sources,
+) {
+  const fields = [
+    'bienesEsperados',
+    'bienesEsperadosRevisados',
+    'bienesConformes',
+    'pendientes',
+    'incidencias',
+    'diferenciasUbicacion',
+    'noRegistrados',
+    'propuestasBaja',
+    'pendientesRevision',
+  ];
+
+  const result = {};
+
+  for (const field of fields) {
+    result[field] = sources.reduce(
+      (sum, source) =>
+        sum + number(source?.[field]),
+      0,
+    );
+  }
+
+  result.porcentajeRevision =
+    dashboardPercent(
+      result.bienesEsperadosRevisados,
+      result.bienesEsperados,
+    );
+
+  return result;
+}
+
+function executiveScopeOptions(
+  overview,
+  level,
+) {
+  if (level === 'direction') {
+    return (
+      overview?.directions || []
+    ).map(
+      (direction) => ({
+        value: direction.name,
+        label: direction.name,
+      }),
+    );
+  }
+
+  if (level === 'department') {
+    return (
+      overview?.directions || []
+    ).flatMap(
+      (direction) =>
+        (direction.departments || []).map(
+          (department) => ({
+            value:
+              `${direction.name}|||${department.name}`,
+            label:
+              `${direction.name} / ${department.name}`,
+          }),
+        ),
+    );
+  }
+
+  if (level === 'section') {
+    return allOverviewSections(
+      overview,
+    ).map(
+      (section) => ({
+        value:
+          String(section.locationId),
+
+        label:
+          `${section.directionName} / `
+          + `${section.departmentName} / `
+          + `${section.section}`,
+      }),
+    );
+  }
+
+  return [];
+}
+
+function resolveExecutiveScope(
+  overview,
+  level,
+  value,
+) {
+  if (level === 'municipality') {
+    return {
+      label: 'Municipio completo',
+      metrics: overview?.overall || {},
+      children:
+        overview?.directions || [],
+      childType: 'direction',
+    };
+  }
+
+  if (level === 'direction') {
+    const direction = (
+      overview?.directions || []
+    ).find(
+      ({ name }) =>
+        name === value,
+    );
+
+    if (!direction) return null;
+
+    return {
+      label: direction.name,
+      metrics: direction.metrics,
+      children:
+        direction.departments || [],
+      childType: 'department',
+    };
+  }
+
+  if (level === 'department') {
+    const [
+      directionName,
+      departmentName,
+    ] = String(value).split('|||');
+
+    const direction = (
+      overview?.directions || []
+    ).find(
+      ({ name }) =>
+        name === directionName,
+    );
+
+    const department = (
+      direction?.departments || []
+    ).find(
+      ({ name }) =>
+        name === departmentName,
+    );
+
+    if (!department) return null;
+
+    return {
+      label:
+        `${directionName} / ${departmentName}`,
+
+      metrics: department.metrics,
+
+      children:
+        department.sections || [],
+
+      childType: 'section',
+    };
+  }
+
+  if (level === 'section') {
+    const section =
+      allOverviewSections(
+        overview,
+      ).find(
+        ({ locationId }) =>
+          number(locationId)
+          === number(value),
+      );
+
+    if (!section) return null;
+
+    return {
+      label:
+        `${section.directionName} / `
+        + `${section.departmentName} / `
+        + `${section.section}`,
+
+      metrics: section,
+      children: [],
+      childType: null,
+      section,
+    };
+  }
+
+  return null;
+}
+
+function appendExecutiveHeroMetric(
+  container,
+  label,
+  value,
+  detail,
+  tone = 'neutral',
+) {
+  const card =
+    document.createElement('article');
+
+  card.className =
+    `executive-hero-metric `
+    + `executive-hero-metric--${tone}`;
+
+  const name =
+    document.createElement('span');
+
+  name.textContent = label;
+
+  const strong =
+    document.createElement('strong');
+
+  strong.textContent = value;
+
+  const small =
+    document.createElement('small');
+
+  small.textContent = detail;
+
+  card.append(
+    name,
+    strong,
+    small,
+  );
+
+  container.append(card);
+}
+
+function renderExecutiveIndicators(
+  metricSet,
+) {
+  elements.executiveQueryIndicators
+    .replaceChildren();
+
+  const definitions = [
+    {
+      label: 'Cobertura',
+      value: `${metricSet.coverage}%`,
+      detail:
+        'Bienes esperados que ya tienen '
+        + 'resultado de terreno.',
+      tone:
+        metricSet.coverage >= 100
+          ? 'success'
+          : 'info',
+    },
+    {
+      label: 'Conformidad',
+      value: `${metricSet.conformity}%`,
+      detail:
+        'Bienes conformes respecto de '
+        + 'los bienes revisados.',
+      tone:
+        metricSet.conformity >= 90
+          ? 'success'
+          : 'warning',
+    },
+    {
+      label: 'Tasa de incidencia',
+      value:
+        `${metricSet.incidenceRate}%`,
+      detail:
+        'Registros con incidencia respecto '
+        + 'de los bienes revisados.',
+      tone:
+        metricSet.incidenceRate > 0
+          ? 'warning'
+          : 'success',
+    },
+  ];
+
+  for (const definition of definitions) {
+    const item =
+      document.createElement('article');
+
+    item.className =
+      `executive-indicator `
+      + `executive-indicator--`
+      + definition.tone;
+
+    const top =
+      document.createElement('div');
+
+    const label =
+      document.createElement('span');
+
+    label.textContent =
+      definition.label;
+
+    const strong =
+      document.createElement('strong');
+
+    strong.textContent =
+      definition.value;
+
+    top.append(
+      label,
+      strong,
+    );
+
+    const progress =
+      document.createElement('div');
+
+    progress.className =
+      'executive-indicator__track';
+
+    const fill =
+      document.createElement('span');
+
+    const percent =
+      Math.max(
+        0,
+        Math.min(
+          100,
+          Number.parseFloat(
+            definition.value,
+          ) || 0,
+        ),
+      );
+
+    fill.style.width =
+      `${percent}%`;
+
+    progress.append(fill);
+
+    const detail =
+      document.createElement('small');
+
+    detail.textContent =
+      definition.detail;
+
+    item.append(
+      top,
+      progress,
+      detail,
+    );
+
+    elements.executiveQueryIndicators
+      .append(item);
+  }
+}
+
+function childExecutiveMetrics(
+  childType,
+  child,
+) {
+  if (
+    childType === 'direction'
+    || childType === 'department'
+  ) {
+    return child.metrics || {};
+  }
+
+  return child || {};
+}
+
+function childExecutiveLabel(
+  childType,
+  child,
+) {
+  if (
+    childType === 'direction'
+    || childType === 'department'
+  ) {
+    return child.name;
+  }
+
+  return child.section
+    || 'Seccion sin nombre';
+}
+
+function renderExecutiveRanking(
+  scope,
+) {
+  elements.executiveQueryRanking
+    .replaceChildren();
+
+  if (!scope.children.length) {
+    elements.executiveQueryRankingTitle
+      .textContent =
+      'Detalle de la seccion';
+
+    const empty =
+      document.createElement('p');
+
+    empty.className =
+      'empty-report';
+
+    empty.textContent =
+      'Esta consulta corresponde al nivel '
+      + 'mas detallado. Use Abrir seccion '
+      + 'para revisar bienes y fotografias.';
+
+    elements.executiveQueryRanking
+      .append(empty);
+
+    return;
+  }
+
+  elements.executiveQueryRankingTitle
+    .textContent =
+    'Unidades dependientes';
+
+  const rows =
+    scope.children
+      .map(
+        (child) => {
+          const metrics =
+            childExecutiveMetrics(
+              scope.childType,
+              child,
+            );
+
+          return {
+            child,
+            metrics,
+            label:
+              childExecutiveLabel(
+                scope.childType,
+                child,
+              ),
+            set:
+              executiveMetricSet(
+                metrics,
+              ),
+          };
+        },
+      )
+      .sort(
+        (a, b) =>
+          b.set.coverage
+          - a.set.coverage,
+      );
+
+  for (const rowData of rows) {
+    const row =
+      document.createElement('article');
+
+    row.className =
+      'executive-ranking-row';
+
+    const name =
+      document.createElement('div');
+
+    const strong =
+      document.createElement('strong');
+
+    strong.textContent =
+      rowData.label;
+
+    const small =
+      document.createElement('small');
+
+    small.textContent =
+      `${rowData.set.reviewed} de `
+      + `${rowData.set.expected} revisados`;
+
+    name.append(
+      strong,
+      small,
+    );
+
+    const track =
+      document.createElement('div');
+
+    track.className =
+      'executive-ranking-row__track';
+
+    const fill =
+      document.createElement('span');
+
+    fill.style.width =
+      `${Math.min(
+        rowData.set.coverage,
+        100,
+      )}%`;
+
+    track.append(fill);
+
+    const percent =
+      document.createElement('strong');
+
+    percent.textContent =
+      `${rowData.set.coverage}%`;
+
+    row.append(
+      name,
+      track,
+      percent,
+    );
+
+    if (scope.childType === 'section') {
+      const button =
+        document.createElement('button');
+
+      button.type = 'button';
+      button.className = 'secondary';
+      button.textContent = 'Abrir';
+
+      button.addEventListener(
+        'click',
+        () => openExplorerLocation(
+          rowData.child.locationId,
+        ),
+      );
+
+      row.append(button);
+    }
+
+    elements.executiveQueryRanking
+      .append(row);
+  }
+}
+
+function renderExecutiveQuery() {
+  const overview =
+    state.overview;
+
+  if (!overview) return;
+
+  const level =
+    elements.executiveQueryLevel.value;
+
+  const value =
+    elements.executiveQueryUnit.value;
+
+  const scope =
+    resolveExecutiveScope(
+      overview,
+      level,
+      value,
+    );
+
+  elements.executiveQueryResult
+    .replaceChildren();
+
+  if (!scope) {
+    const empty =
+      document.createElement('p');
+
+    empty.className = 'empty-report';
+
+    empty.textContent =
+      'Seleccione una unidad para consultar.';
+
+    elements.executiveQueryResult
+      .append(empty);
+
+    elements.executiveQueryIndicators
+      .replaceChildren();
+
+    elements.executiveQueryRanking
+      .replaceChildren();
+
+    return;
+  }
+
+  const set =
+    executiveMetricSet(
+      scope.metrics,
+    );
+
+  const title =
+    document.createElement('div');
+
+  title.className =
+    'executive-query__scope';
+
+  const kicker =
+    document.createElement('span');
+
+  kicker.textContent =
+    'RESULTADO DE CONSULTA';
+
+  const heading =
+    document.createElement('h3');
+
+  heading.textContent =
+    scope.label;
+
+  title.append(
+    kicker,
+    heading,
+  );
+
+  const metrics =
+    document.createElement('div');
+
+  metrics.className =
+    'executive-query__metrics';
+
+  for (const metric of [
+    [
+      'Esperados',
+      dashboardNumber(set.expected),
+      'Universo maestro',
+      'neutral',
+    ],
+    [
+      'Revisados',
+      dashboardNumber(set.reviewed),
+      `${set.coverage}% cobertura`,
+      'info',
+    ],
+    [
+      'Conformes',
+      dashboardNumber(set.conforming),
+      `${set.conformity}% de revisados`,
+      'success',
+    ],
+    [
+      'Incidencias',
+      dashboardNumber(set.incidences),
+      'Registros vigentes',
+      'warning',
+    ],
+    [
+      'Pendientes',
+      dashboardNumber(set.pending),
+      'Aun por resolver en terreno',
+      'neutral',
+    ],
+    [
+      'Hallazgos',
+      dashboardNumber(set.findings),
+      'Adicionales al maestro',
+      'finding',
+    ],
+  ]) {
+    appendExecutiveHeroMetric(
+      metrics,
+      ...metric,
+    );
+  }
+
+  elements.executiveQueryResult.append(
+    title,
+    metrics,
+  );
+
+  if (scope.section) {
+    const action =
+      document.createElement('div');
+
+    action.className =
+      'executive-query__actions';
+
+    const button =
+      document.createElement('button');
+
+    button.type = 'button';
+    button.textContent =
+      'Abrir seccion completa';
+
+    button.addEventListener(
+      'click',
+      () => openExplorerLocation(
+        scope.section.locationId,
+      ),
+    );
+
+    action.append(button);
+
+    elements.executiveQueryResult
+      .append(action);
+  }
+
+  renderExecutiveIndicators(set);
+  renderExecutiveRanking(scope);
+
+  elements.executiveQueryCutoff
+    .textContent =
+    `Actualizado: ${
+      dateTime(overview.generatedAt)
+    }`;
+}
+
+function refreshExecutiveQueryOptions() {
+  const level =
+    elements.executiveQueryLevel.value;
+
+  if (level === 'municipality') {
+    elements.executiveQueryUnitWrap.hidden =
+      true;
+
+    setExplorerOptions(
+      elements.executiveQueryUnit,
+      [],
+    );
+
+    renderExecutiveQuery();
+    return;
+  }
+
+  elements.executiveQueryUnitWrap.hidden =
+    false;
+
+  const options =
+    executiveScopeOptions(
+      state.overview,
+      level,
+    );
+
+  setExplorerOptions(
+    elements.executiveQueryUnit,
+    options,
+  );
+
+  renderExecutiveQuery();
+}
 
 function sectionOperationalPriority(section) {
   const critical =
@@ -2981,6 +3739,7 @@ async function refreshDashboardOverview() {
     renderDashboard(overview);
     renderOverview(overview);
     refreshExplorerFilters(overview);
+    refreshExecutiveQueryOptions();
 
     if (state.explorerLocationId) {
       await refreshExplorerSection({
@@ -3400,6 +4159,17 @@ elements.sessionSelect.addEventListener('change', async () => {
   }
 });
 
+
+
+elements.executiveQueryLevel.addEventListener(
+  'change',
+  refreshExecutiveQueryOptions,
+);
+
+elements.executiveQueryUnit.addEventListener(
+  'change',
+  renderExecutiveQuery,
+);
 
 elements.explorerDirection.addEventListener(
   'change',
