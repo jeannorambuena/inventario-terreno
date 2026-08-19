@@ -68,6 +68,7 @@ const elements = {
   auditPackageSheet: document.querySelector('#audit-package-sheet'),
   printAuditPackage: document.querySelector('#print-audit-package'),
   exportAuditCsv: document.querySelector('#export-audit-csv'),
+  downloadAuditManifest: document.querySelector('#download-audit-manifest'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -2996,7 +2997,7 @@ function renderAuditPackage(
 
   appendAuditPackageDefinition(
     manifestGrid,
-    'Fecha de corte',
+    'Fecha de consulta',
     dateTime(
       manifest.generatedAt,
     ),
@@ -3008,6 +3009,19 @@ function renderAuditPackage(
     manifest.evidenceIntegrity,
   );
 
+  appendAuditPackageDefinition(
+    manifestGrid,
+    'Alcance huella',
+    manifest.digestScope,
+  );
+
+  appendAuditPackageDefinition(
+    manifestGrid,
+    'Algoritmo',
+    manifest.digestAlgorithm,
+  );
+
+
   const digest =
     document.createElement('div');
 
@@ -3018,7 +3032,7 @@ function renderAuditPackage(
     document.createElement('span');
 
   digestLabel.textContent =
-    'SHA-256 DEL SNAPSHOT';
+    'SHA-256 SNAPSHOT CANONICO';
 
   const digestCode =
     document.createElement('code');
@@ -3119,6 +3133,75 @@ function printAuditPackageView() {
     },
     250,
   );
+}
+
+
+function downloadAuditManifest() {
+  const packageData =
+    state.explorerAuditPackage;
+
+  if (
+    !packageData?.verification
+    || !packageData?.manifest
+  ) {
+    return;
+  }
+
+  const verification =
+    packageData.verification;
+
+  const content =
+    JSON.stringify(
+      verification,
+      null,
+      2,
+    )
+    + '\n';
+
+  const blob =
+    new Blob(
+      [content],
+      {
+        type:
+          'application/json;charset=utf-8',
+      },
+    );
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement('a');
+
+  const packageCode =
+    String(
+      packageData.manifest.packageCode
+      || 'expediente',
+    )
+      .replace(
+        /[^a-zA-Z0-9_-]+/g,
+        '-',
+      );
+
+  const digest =
+    String(
+      packageData.manifest.digestSha256
+      || '',
+    ).slice(
+      0,
+      12,
+    );
+
+  link.href = url;
+
+  link.download =
+    `manifiesto-${packageCode}-${digest}.json`;
+
+  document.body.append(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
 }
 
 function downloadAuditCsv() {
@@ -5654,6 +5737,9 @@ async function refreshExplorerSection({
     elements.exportAuditCsv.disabled =
       !packageReady;
 
+    elements.downloadAuditManifest.disabled =
+      !packageReady;
+
     elements.explorerStatus.textContent =
       section.sessionId
         ? (
@@ -5691,6 +5777,7 @@ async function selectExplorerSection() {
     elements.openAuditPackage.disabled = true;
     elements.printAuditPackage.disabled = true;
     elements.exportAuditCsv.disabled = true;
+    elements.downloadAuditManifest.disabled = true;
 
     elements.explorerContent.hidden = true;
     elements.explorerEmpty.hidden = false;
@@ -6342,6 +6429,12 @@ document.querySelectorAll(
 
 
 
+
+
+elements.downloadAuditManifest.addEventListener(
+  'click',
+  downloadAuditManifest,
+);
 
 elements.openAuditPackage.addEventListener(
   'click',

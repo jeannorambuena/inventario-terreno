@@ -11,7 +11,10 @@
     "test": "vitest run --pool=threads --maxWorkers=1",
     "test:mobile": "vitest run tests/mobile.test.js",
     "test:watch": "vitest",
-    "verify:field": "node scripts/verify-field-integrity.js"
+    "verify:field": "node scripts/verify-field-integrity.js",
+    "backup:operational": "node src/database/operational-backup.js create",
+    "backup:verify": "node src/database/operational-backup.js verify-latest",
+    "pilot:ready": "npm test && npm run verify:field && npm run backup:operational && npm run backup:verify"
   },
   "engines": {
     "node": ">=24 <25"

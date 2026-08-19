@@ -1604,11 +1604,18 @@ function createAuditPackage(
   const packageCode =
     `AUD-S${sessionId}-L${summary.locationId}`;
 
-  const manifestBase = {
-    schemaVersion: 1,
+  const digestManifest = {
+    schemaVersion: 2,
+
+    digestAlgorithm:
+      'SHA-256',
+
+    digestScope:
+      'canonical-audit-snapshot-v2',
+
     packageCode,
-    generatedAt,
     sessionId,
+
     locationId:
       summary.locationId,
 
@@ -1644,23 +1651,38 @@ function createAuditPackage(
     audit,
   };
 
+  const digestInput = {
+    manifest:
+      digestManifest,
+
+    snapshot,
+  };
+
   const digestSha256 =
-    auditPackageDigest({
-      manifest:
-        manifestBase,
-      snapshot,
-    });
+    auditPackageDigest(
+      digestInput,
+    );
+
+  const verification = {
+    ...digestInput,
+    digestSha256,
+  };
 
   return {
     manifest: {
-      ...manifestBase,
+      ...digestManifest,
+
+      generatedAt,
+
       digestSha256,
     },
+
     summary,
     lifecycle,
     evidenceIntegrity,
     incidences,
     audit,
+    verification,
   };
 }
 
