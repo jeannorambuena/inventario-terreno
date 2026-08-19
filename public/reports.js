@@ -21,6 +21,18 @@ const elements = {
   explorerExpectedCount: document.querySelector('#explorer-expected-count'),
   explorerFindingsCount: document.querySelector('#explorer-findings-count'),
   explorerEvidenceCount: document.querySelector('#explorer-evidence-count'),
+  explorerDonut: document.querySelector('#explorer-donut'),
+  explorerDonutTotal: document.querySelector('#explorer-donut-total'),
+  explorerOutcomeLegend: document.querySelector('#explorer-outcome-legend'),
+  explorerRecent: document.querySelector('#explorer-recent'),
+  explorerSearch: document.querySelector('#explorer-search'),
+  explorerAssetsShown: document.querySelector('#explorer-assets-shown'),
+  presentationMode: document.querySelector('#dashboard-presentation-mode'),
+  assetDialog: document.querySelector('#asset-dialog'),
+  assetDialogTitle: document.querySelector('#asset-dialog-title'),
+  assetDialogSubtitle: document.querySelector('#asset-dialog-subtitle'),
+  assetDialogContent: document.querySelector('#asset-dialog-content'),
+  closeAssetDialog: document.querySelector('#close-asset-dialog'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -751,14 +763,421 @@ function createExplorerStateBadge(
   return badge;
 }
 
+
+function explorerOutcome(observation) {
+  const definitions = {
+    verificado: {
+      label: 'Conforme',
+      tone: 'success',
+      color: 'var(--success)',
+    },
+    dato_distinto: {
+      label: 'Datos distintos',
+      tone: 'warning',
+      color: '#d18b27',
+    },
+    otra_ubicacion: {
+      label: 'Otra ubicacion',
+      tone: 'info',
+      color: 'var(--info)',
+    },
+    no_ubicado: {
+      label: 'No encontrado',
+      tone: 'danger',
+      color: 'var(--danger)',
+    },
+    desconocido: {
+      label: 'Hallazgo adicional',
+      tone: 'finding',
+      color: '#7561a8',
+    },
+  };
+
+  return definitions[
+    observation?.status
+  ] || {
+    label: 'Otro',
+    tone: 'neutral',
+    color: '#a7aaa3',
+  };
+}
+
+function renderExplorerAnalytics(
+  observations,
+) {
+  const groups = new Map();
+
+  for (const observation of observations) {
+    const outcome =
+      explorerOutcome(observation);
+
+    if (!groups.has(outcome.label)) {
+      groups.set(
+        outcome.label,
+        {
+          ...outcome,
+          count: 0,
+        },
+      );
+    }
+
+    groups.get(outcome.label).count += 1;
+  }
+
+  const values = [
+    ...groups.values(),
+  ];
+
+  const total = observations.length;
+
+  elements.explorerDonutTotal.textContent =
+    String(total);
+
+  elements.explorerOutcomeLegend.replaceChildren();
+
+  if (total === 0) {
+    elements.explorerDonut.style.background =
+      '#e4e5e0';
+
+    const empty = document.createElement('p');
+    empty.className = 'empty-report';
+    empty.textContent =
+      'Aun no hay registros de terreno.';
+
+    elements.explorerOutcomeLegend.append(empty);
+
+  } else {
+    let start = 0;
+    const segments = [];
+
+    for (const value of values) {
+      const percent =
+        (value.count / total) * 100;
+
+      const end = start + percent;
+
+      segments.push(
+        `${value.color} ${start}% ${end}%`,
+      );
+
+      start = end;
+    }
+
+    elements.explorerDonut.style.background =
+      `conic-gradient(${segments.join(', ')})`;
+
+    for (const value of values) {
+      const row = document.createElement('div');
+      row.className =
+        'explorer-outcome-legend__row';
+
+      const label = document.createElement('span');
+
+      const dot = document.createElement('i');
+      dot.style.background = value.color;
+
+      const text = document.createElement('span');
+      text.textContent = value.label;
+
+      label.append(
+        dot,
+        text,
+      );
+
+      const count = document.createElement('strong');
+
+      const percent = Math.round(
+        (value.count / total) * 100,
+      );
+
+      count.textContent =
+        `${value.count} (${percent}%)`;
+
+      row.append(
+        label,
+        count,
+      );
+
+      elements.explorerOutcomeLegend.append(row);
+    }
+  }
+
+  renderExplorerRecent(observations);
+}
+
+function renderExplorerRecent(observations) {
+  elements.explorerRecent.replaceChildren();
+
+  const recent = [...observations]
+    .sort(
+      (a, b) =>
+        Date.parse(b.observedAt || 0)
+        - Date.parse(a.observedAt || 0),
+    )
+    .slice(0, 6);
+
+  for (const observation of recent) {
+    const row = document.createElement('article');
+    row.className = 'explorer-recent__item';
+
+    const status =
+      explorerOutcome(observation);
+
+    const badge = document.createElement('span');
+    badge.className =
+      `explorer-recent__dot explorer-recent__dot--${status.tone}`;
+
+    const body = document.createElement('div');
+
+    const code = document.createElement('strong');
+
+    code.textContent =
+      observation.assetCode
+      || observation.provisionalCode
+      || 'Sin codigo';
+
+    const name = document.createElement('span');
+
+    name.textContent =
+      observation.assetName
+      || observation.details?.provisional?.description
+      || 'Bien fisico';
+
+    const meta = document.createElement('small');
+
+    meta.textContent =
+      `${status.label} ? ${dateTime(observation.observedAt)}`;
+
+    body.append(
+      code,
+      name,
+      meta,
+    );
+
+    row.append(
+      badge,
+      body,
+    );
+
+    elements.explorerRecent.append(row);
+  }
+
+  if (recent.length === 0) {
+    const empty = document.createElement('p');
+
+    empty.className = 'empty-report';
+
+    empty.textContent =
+      'Sin actividad registrada en esta seccion.';
+
+    elements.explorerRecent.append(empty);
+  }
+}
+
+function fieldConditionLabel(value) {
+  return {
+    bueno: 'Bueno',
+    regular: 'Regular',
+    malo: 'Malo',
+    incompleto: 'Incompleto',
+  }[value] || value || '\u2014';
+}
+
+function functionalityLabel(value) {
+  return {
+    operativo: 'Operativo',
+    operativo_con_falla: 'Operativo con falla',
+    no_operativo: 'No operativo',
+    no_verificable: 'No verificable',
+  }[value] || value || '\u2014';
+}
+
+function findIncidenceForObservation(
+  observation,
+) {
+  if (!observation) return null;
+
+  return (
+    state.explorerReport?.incidences || []
+  ).find(
+    (incidence) =>
+      number(incidence.id)
+      === number(observation.id),
+  ) || null;
+}
+
+function openAssetDossier(
+  asset,
+  observation,
+) {
+  elements.assetDialogContent.replaceChildren();
+
+  elements.assetDialogTitle.textContent =
+    asset.name || 'Bien del inventario';
+
+  elements.assetDialogSubtitle.textContent =
+    asset.assetCode || 'SIN CODIGO';
+
+  const masterTitle = document.createElement('h3');
+  masterTitle.textContent =
+    'Registro maestro';
+
+  const master = document.createElement('dl');
+  master.className = 'report-detail-grid';
+
+  appendDefinition(
+    master,
+    'Codigo patrimonial',
+    asset.assetCode || '\u2014',
+  );
+
+  appendDefinition(
+    master,
+    'Codigo escaner',
+    asset.scannerCode || '\u2014',
+  );
+
+  appendDefinition(
+    master,
+    'Bien',
+    asset.name || '\u2014',
+  );
+
+  appendDefinition(
+    master,
+    'Marca',
+    asset.brand || '\u2014',
+  );
+
+  appendDefinition(
+    master,
+    'Modelo',
+    asset.model || '\u2014',
+  );
+
+  appendDefinition(
+    master,
+    'Serie',
+    asset.serialNumber || '\u2014',
+  );
+
+  appendDefinition(
+    master,
+    'Ubicacion registrada',
+    locationText(asset),
+  );
+
+  elements.assetDialogContent.append(
+    masterTitle,
+    master,
+  );
+
+  const fieldTitle = document.createElement('h3');
+  fieldTitle.textContent =
+    'Resultado del levantamiento';
+
+  const field = document.createElement('dl');
+  field.className = 'report-detail-grid';
+
+  if (!observation) {
+    appendDefinition(
+      field,
+      'Estado',
+      'Pendiente de revisar',
+    );
+
+    appendDefinition(
+      field,
+      'Observacion en terreno',
+      'Aun no existe una observacion vigente.',
+    );
+
+  } else {
+    appendDefinition(
+      field,
+      'Estado',
+      observationStateLabel(observation),
+    );
+
+    appendDefinition(
+      field,
+      'Fecha / hora',
+      dateTime(observation.observedAt),
+    );
+
+    appendDefinition(
+      field,
+      'Conservacion',
+      fieldConditionLabel(
+        observation.details?.physicalCondition,
+      ),
+    );
+
+    appendDefinition(
+      field,
+      'Funcionamiento',
+      functionalityLabel(
+        observation.details?.functionality,
+      ),
+    );
+
+    appendDefinition(
+      field,
+      'Version',
+      String(
+        observation.versionNumber || 1,
+      ),
+    );
+  }
+
+  elements.assetDialogContent.append(
+    fieldTitle,
+    field,
+  );
+
+  const incidence =
+    findIncidenceForObservation(
+      observation,
+    );
+
+  if (incidence) {
+    const actions = document.createElement('div');
+    actions.className = 'asset-dossier__actions';
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent =
+      'Ver incidencia y evidencia';
+
+    button.addEventListener(
+      'click',
+      () => {
+        elements.assetDialog.close();
+
+        openIncidence(
+          incidence.id,
+          state.explorerSessionId,
+        );
+      },
+    );
+
+    actions.append(button);
+    elements.assetDialogContent.append(actions);
+  }
+
+  elements.assetDialog.showModal();
+}
+
 function renderExplorerAssets(
   assets,
   observations,
 ) {
   elements.explorerAssets.replaceChildren();
 
-  elements.explorerExpectedCount.textContent =
-    String(assets.length);
+  const query =
+    state.explorerQuery
+      .trim()
+      .toLocaleLowerCase('es');
 
   const byAsset = new Map(
     observations
@@ -771,7 +1190,41 @@ function renderExplorerAssets(
       ),
   );
 
+  const filtered = assets.filter(
+    (asset) => {
+      if (!query) return true;
+
+      const observation =
+        byAsset.get(number(asset.id));
+
+      const searchable = [
+        asset.assetCode,
+        asset.scannerCode,
+        asset.name,
+        asset.brand,
+        asset.model,
+        observationStateLabel(observation),
+        observation?.details?.physicalCondition,
+        observation?.details?.functionality,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase('es');
+
+      return searchable.includes(query);
+    },
+  );
+
+  elements.explorerExpectedCount.textContent =
+    String(assets.length);
+
+  elements.explorerAssetsShown.textContent =
+    query
+      ? `${filtered.length} de ${assets.length}`
+      : `${assets.length} bienes`;
+
   const header = document.createElement('div');
+
   header.className =
     'explorer-row explorer-row--header';
 
@@ -780,6 +1233,7 @@ function renderExplorerAssets(
     'Bien',
     'Estado',
     'Condicion',
+    '',
   ]) {
     const cell = document.createElement('span');
     cell.textContent = label;
@@ -788,7 +1242,7 @@ function renderExplorerAssets(
 
   elements.explorerAssets.append(header);
 
-  for (const asset of assets) {
+  for (const asset of filtered) {
     const observation =
       byAsset.get(number(asset.id));
 
@@ -796,10 +1250,12 @@ function renderExplorerAssets(
     row.className = 'explorer-row';
 
     const code = document.createElement('strong');
+
     code.textContent =
       asset.assetCode || 'Sin codigo';
 
     const name = document.createElement('span');
+
     name.textContent =
       asset.name || 'Bien sin descripcion';
 
@@ -811,30 +1267,48 @@ function renderExplorerAssets(
     const condition = document.createElement('span');
 
     condition.textContent =
-      observation?.details?.physicalCondition
-      || (
-        observation?.status === 'verificado'
-          ? 'Sin observacion'
-          : observation
-            ? 'Registrada'
-            : '\u2014'
-      );
+      observation
+        ? fieldConditionLabel(
+          observation.details?.physicalCondition,
+        )
+        : '\u2014';
+
+    const button = document.createElement('button');
+
+    button.type = 'button';
+    button.className =
+      'secondary explorer-row__detail';
+
+    button.textContent = 'Ver ficha';
+
+    button.addEventListener(
+      'click',
+      () => openAssetDossier(
+        asset,
+        observation,
+      ),
+    );
 
     row.append(
       code,
       name,
       status,
       condition,
+      button,
     );
 
     elements.explorerAssets.append(row);
   }
 
-  if (assets.length === 0) {
+  if (filtered.length === 0) {
     const empty = document.createElement('p');
+
     empty.className = 'empty-report';
+
     empty.textContent =
-      'La seccion no tiene bienes esperados en el maestro.';
+      query
+        ? 'No hay bienes que coincidan con la busqueda.'
+        : 'La seccion no tiene bienes esperados en el maestro.';
 
     elements.explorerAssets.append(empty);
   }
@@ -1100,10 +1574,7 @@ async function refreshExplorerSection({
   }
 
   try {
-    const assetsPromise = api(
-      `/api/assets?locationId=${section.locationId}`,
-    );
-
+    let assets = [];
     let observations = [];
     let report = null;
 
@@ -1113,7 +1584,9 @@ async function refreshExplorerSection({
         observationsResult,
         reportResult,
       ] = await Promise.all([
-        assetsPromise,
+        api(
+          `/api/assets?locationId=${section.locationId}`,
+        ),
         api(
           `/api/sessions/${section.sessionId}/observations`,
         ),
@@ -1122,31 +1595,39 @@ async function refreshExplorerSection({
         ),
       ]);
 
+      assets =
+        assetsResult.assets || [];
+
       observations =
         observationsResult.observations || [];
 
       report =
         reportResult.report || null;
 
-      renderExplorerAssets(
-        assetsResult.assets || [],
-        observations,
-      );
-
     } else {
-      const assetsResult =
-        await assetsPromise;
-
-      renderExplorerAssets(
-        assetsResult.assets || [],
-        [],
+      const assetsResult = await api(
+        `/api/assets?locationId=${section.locationId}`,
       );
+
+      assets =
+        assetsResult.assets || [];
     }
 
     state.explorerSessionId =
       section.sessionId || null;
 
+    state.explorerSection = section;
+    state.explorerAssets = assets;
+    state.explorerObservations =
+      observations;
+    state.explorerReport = report;
+
     renderExplorerMetrics(section);
+
+    renderExplorerAssets(
+      assets,
+      observations,
+    );
 
     renderExplorerFindings(
       observations,
@@ -1155,6 +1636,10 @@ async function refreshExplorerSection({
     );
 
     renderExplorerEvidence(report);
+
+    renderExplorerAnalytics(
+      observations,
+    );
 
     elements.explorerBreadcrumb.textContent =
       `${section.directionName} / `
@@ -1760,6 +2245,47 @@ document.querySelectorAll(
         button.dataset.explorerTab,
       ),
     );
+  },
+);
+
+
+elements.explorerSearch.addEventListener(
+  'input',
+  () => {
+    state.explorerQuery =
+      elements.explorerSearch.value || '';
+
+    renderExplorerAssets(
+      state.explorerAssets,
+      state.explorerObservations,
+    );
+  },
+);
+
+elements.presentationMode.addEventListener(
+  'click',
+  () => {
+    const active =
+      document.body.classList.toggle(
+        'dashboard-presentation',
+      );
+
+    elements.presentationMode.setAttribute(
+      'aria-pressed',
+      String(active),
+    );
+
+    elements.presentationMode.textContent =
+      active
+        ? 'Salir de presentacion'
+        : 'Presentar avance';
+  },
+);
+
+elements.closeAssetDialog.addEventListener(
+  'click',
+  () => {
+    elements.assetDialog.close();
   },
 );
 

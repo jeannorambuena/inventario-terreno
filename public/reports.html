@@ -137,6 +137,13 @@
               </p>
             </div>
 
+            <button id="dashboard-presentation-mode"
+              type="button"
+              class="secondary dashboard-presentation-button"
+              aria-pressed="false">
+              Presentar avance
+            </button>
+
             <span id="explorer-status"
               class="explorer-status">
               Seleccione una secci&oacute;n
@@ -181,6 +188,53 @@
               class="dashboard-kpis dashboard-kpis--section">
             </div>
 
+            <div id="explorer-analytics"
+              class="explorer-analytics">
+
+              <article class="explorer-analytics-card">
+                <header>
+                  <div>
+                    <p class="section-kicker">
+                      RESULTADOS
+                    </p>
+                    <h3>Estado de registros</h3>
+                  </div>
+                </header>
+
+                <div class="explorer-outcome">
+                  <div id="explorer-donut"
+                    class="explorer-donut"
+                    aria-label="Distribucion de registros">
+
+                    <div class="explorer-donut__center">
+                      <strong id="explorer-donut-total">0</strong>
+                      <span>registros</span>
+                    </div>
+                  </div>
+
+                  <div id="explorer-outcome-legend"
+                    class="explorer-outcome-legend">
+                  </div>
+                </div>
+              </article>
+
+              <article class="explorer-analytics-card">
+                <header>
+                  <div>
+                    <p class="section-kicker">
+                      ACTIVIDAD
+                    </p>
+                    <h3>Ultimos registros</h3>
+                  </div>
+                </header>
+
+                <div id="explorer-recent"
+                  class="explorer-recent">
+                </div>
+              </article>
+
+            </div>
+
             <nav class="explorer-tabs"
               aria-label="Contenido de la secci&oacute;n">
               <button type="button"
@@ -216,6 +270,20 @@
                 </div>
                 <span id="explorer-expected-count"
                   class="count-badge">0</span>
+              </div>
+
+              <div class="explorer-toolbar">
+                <label class="explorer-search">
+                  <span>Buscar en esta seccion</span>
+                  <input id="explorer-search"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Codigo, nombre, marca o estado">
+                </label>
+
+                <span id="explorer-assets-shown"
+                  class="explorer-assets-shown">
+                </span>
               </div>
 
               <div id="explorer-assets"
@@ -362,6 +430,35 @@
         <p id="report-message" class="app-alert" role="status" aria-live="polite"></p>
       </main>
     </div>
+
+    <dialog id="asset-dialog"
+      aria-labelledby="asset-dialog-title">
+
+      <article class="report-dialog asset-dossier">
+
+        <div class="report-heading">
+          <div>
+            <p id="asset-dialog-subtitle"
+              class="section-kicker">
+              FICHA DEL BIEN
+            </p>
+
+            <h2 id="asset-dialog-title">
+              Detalle del bien
+            </h2>
+          </div>
+
+          <button id="close-asset-dialog"
+            type="button"
+            class="secondary">
+            Cerrar
+          </button>
+        </div>
+
+        <div id="asset-dialog-content"></div>
+
+      </article>
+    </dialog>
 
     <dialog id="incidence-dialog" aria-labelledby="incidence-dialog-title">
       <article class="report-dialog">
