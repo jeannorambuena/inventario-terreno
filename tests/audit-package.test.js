@@ -74,9 +74,9 @@ beforeEach(() => {
         row_count
       )
       VALUES (
-        'trace-import',
-        'trace.xlsx',
-        'trace-checksum',
+        'package-import',
+        'package.xlsx',
+        'package-checksum',
         'BD_SQL',
         1
       )
@@ -93,11 +93,11 @@ beforeEach(() => {
         section
       )
       VALUES (
-        'TRACE-LOC',
-        'Dependencia trazabilidad',
-        'Direccion trazabilidad',
-        'Departamento trazabilidad',
-        'Seccion trazabilidad'
+        'PACKAGE-LOC',
+        'Dependencia expediente',
+        'Direccion expediente',
+        'Departamento expediente',
+        'Seccion expediente'
       )
       RETURNING id
     `).get();
@@ -112,11 +112,11 @@ beforeEach(() => {
         scanner_code
       )
       VALUES (
-        'TRACE-0001',
+        'PACKAGE-0001',
         ?,
         ?,
-        'Bien trazable',
-        'TRACE-SCAN-0001'
+        'Bien expediente',
+        'PACKAGE-SCAN-0001'
       )
       RETURNING id
     `).get(
@@ -139,16 +139,16 @@ afterEach(() => {
 });
 
 
-async function createTraceSession() {
+async function createPackageSession() {
   const created =
     await request(app)
       .post('/api/sessions')
       .send({
         locationId,
         operatorCode:
-          'AUDITOR-TEST',
+          'AUDITOR-PACKAGE',
         deviceCode:
-          'NOTEBOOK-TEST',
+          'NOTEBOOK-PACKAGE',
       })
       .expect(201);
 
@@ -165,9 +165,9 @@ async function createTraceSession() {
       locationId,
       observation: '',
       operatorCode:
-        'AUDITOR-TEST',
+        'AUDITOR-PACKAGE',
       deviceCode:
-        'NOTEBOOK-TEST',
+        'NOTEBOOK-PACKAGE',
     })
     .expect(201);
 
@@ -176,13 +176,13 @@ async function createTraceSession() {
 
 
 describe(
-  'trazabilidad y auditoria',
+  'expediente de auditoria',
   () => {
     test(
-      'expone auditoria de una sesion sin modificar datos',
+      'endpoint genera expediente sin escribir auditoria',
       async () => {
         const sessionId =
-          await createTraceSession();
+          await createPackageSession();
 
         const before =
           database.prepare(
@@ -192,7 +192,7 @@ describe(
         const response =
           await request(app)
             .get(
-              `/api/sessions/${sessionId}/audit`,
+              `/api/sessions/${sessionId}/audit-package`,
             )
             .expect(200);
 
@@ -204,138 +204,152 @@ describe(
         expect(after).toBe(before);
 
         expect(
-          response.body.audit
-            .map(
-              ({ actionCode }) =>
-                actionCode,
-            ),
-        ).toContain(
-          'session_created',
-        );
-
-        expect(
-          response.body.audit
-            .map(
-              ({ actionCode }) =>
-                actionCode,
-            ),
-        ).toContain(
-          'observation_created',
-        );
+          response.body.package.summary.id,
+        ).toBe(sessionId);
       },
     );
 
     test(
-      'vincula evento de observacion con bien maestro',
+      'manifiesto contiene sha256 del snapshot',
       async () => {
         const sessionId =
-          await createTraceSession();
+          await createPackageSession();
 
         const response =
           await request(app)
             .get(
-              `/api/sessions/${sessionId}/audit`,
+              `/api/sessions/${sessionId}/audit-package`,
             )
             .expect(200);
 
-        const event =
-          response.body.audit.find(
-            ({ actionCode }) =>
-              actionCode
-              === 'observation_created',
-          );
-
-        expect(event).toMatchObject({
-          assetId,
-          assetCode: 'TRACE-0001',
-          assetName: 'Bien trazable',
-          displayCode: 'TRACE-0001',
-          observationActive: true,
-        });
+        expect(
+          response.body.package
+            .manifest.digestSha256,
+        ).toMatch(
+          /^[a-f0-9]{64}$/,
+        );
 
         expect(
-          event.payload.after.assetId,
-        ).toBe(assetId);
+          response.body.package
+            .manifest.packageCode,
+        ).toContain(
+          `AUD-S${sessionId}-`,
+        );
       },
     );
 
     test(
-      'busqueda global encuentra codigo patrimonial',
+      'expediente reporta integridad de evidencias',
       async () => {
-        await createTraceSession();
+        const sessionId =
+          await createPackageSession();
 
         const response =
           await request(app)
             .get(
-              '/api/audit/search?q=TRACE-0001',
+              `/api/sessions/${sessionId}/audit-package`,
             )
             .expect(200);
 
         expect(
-          response.body.matches,
-        ).toHaveLength(1);
-
-        expect(
-          response.body.matches[0],
+          response.body.package
+            .evidenceIntegrity,
         ).toMatchObject({
-          assetCode: 'TRACE-0001',
-          displayCode: 'TRACE-0001',
-          assetName: 'Bien trazable',
-          locationId,
+          activeFiles: 0,
+          available: 0,
+          missing: 0,
+          invalid: 0,
+          integrityOk: true,
         });
       },
     );
 
     test(
-      'busqueda global exige criterio suficiente',
+      'incluye ciclo de vida y auditoria',
       async () => {
-        await request(app)
-          .get('/api/audit/search?q=T')
-          .expect(400);
+        const sessionId =
+          await createPackageSession();
+
+        const response =
+          await request(app)
+            .get(
+              `/api/sessions/${sessionId}/audit-package`,
+            )
+            .expect(200);
+
+        expect(
+          response.body.package
+            .lifecycle.activeRecords,
+        ).toBe(1);
+
+        expect(
+          response.body.package.audit.length,
+        ).toBeGreaterThanOrEqual(2);
       },
     );
 
     test(
-      'dashboard incluye pestana de auditoria',
+      'dashboard incluye expediente de seccion',
       () => {
         expect(html).toContain(
-          'data-explorer-tab="audit"',
+          'id="open-audit-package"',
         );
 
         expect(html).toContain(
-          'id="explorer-panel-audit"',
+          'data-explorer-tab="dossier"',
         );
 
         expect(html).toContain(
-          'id="explorer-audit"',
+          'id="audit-package-sheet"',
         );
       },
     );
 
     test(
-      'explorador carga audit log con el resto del estado',
+      'explorador carga audit-package',
       () => {
         expect(js).toContain(
           '`/api/sessions/${section.sessionId}/audit-package`',
         );
 
         expect(js).toContain(
-          'auditPackage?.audit || []',
+          'state.explorerAuditPackage',
         );
 
         expect(js).toContain(
-          'state.explorerAuditEvents = audit;',
-        );
-
-        expect(js).toContain(
-          'renderExplorerAudit(',
+          'renderAuditPackage(',
         );
       },
     );
 
     test(
-      'distingue vigente e historico',
+      'permite imprimir expediente',
       () => {
+        expect(js).toContain(
+          'function printAuditPackageView()',
+        );
+
+        expect(js).toContain(
+          "'print-audit-package'",
+        );
+
+        expect(css).toContain(
+          'body.print-audit-package',
+        );
+      },
+    );
+
+    test(
+      'permite exportar auditoria csv',
+      () => {
+        expect(html).toContain(
+          'id="export-audit-csv"',
+        );
+
+        expect(js).toContain(
+          'function downloadAuditCsv()',
+        );
+
         expect(js).toContain(
           "'VIGENTE'",
         );
@@ -343,64 +357,39 @@ describe(
         expect(js).toContain(
           "'HISTORICO'",
         );
+      },
+    );
 
-        expect(css).toContain(
-          '.audit-current-state',
+    test(
+      'expediente conserva separacion maestro terreno',
+      () => {
+        expect(js).toContain(
+          'summary.hallazgosProvisionales',
         );
 
-        expect(css).toContain(
-          '.audit-historical-state',
+        expect(js).toContain(
+          "'Universo maestro'",
+        );
+
+        expect(js).toContain(
+          "'Hallazgos adicionales'",
         );
       },
     );
 
     test(
-      'ficha de bien incluye historial',
+      'expediente es compartible por url',
       () => {
         expect(js).toContain(
-          'function renderAssetAuditHistory(',
-        );
-
-        expect(js).toContain(
-          "'Historial y trazabilidad'",
-        );
-      },
-    );
-
-    test(
-      'permite buscar trazabilidad global',
-      () => {
-        expect(html).toContain(
-          'id="traceability-search"',
+          "'dossier',",
         );
 
         expect(html).toContain(
-          'id="trace-search-input"',
-        );
-
-        expect(js).toContain(
-          'function searchGlobalTraceability()',
+          'data-explorer-panel="dossier"',
         );
 
         expect(routes).toContain(
-          "router.get('/audit/search'",
-        );
-      },
-    );
-
-    test(
-      'auditoria se conserva como pestana compartible',
-      () => {
-        expect(js).toContain(
-          "'audit',",
-        );
-
-        expect(js).toContain(
-          "setExplorerTab('audit');",
-        );
-
-        expect(css).toContain(
-          '.audit-timeline',
+          "router.get('/sessions/:id/audit-package'",
         );
       },
     );

@@ -1332,6 +1332,337 @@ function searchTraceability(
   ];
 }
 
+
+function canonicalAuditValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(
+      canonicalAuditValue,
+    );
+  }
+
+  if (
+    value
+    && typeof value === 'object'
+  ) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map(
+          (key) => [
+            key,
+            canonicalAuditValue(
+              value[key],
+            ),
+          ],
+        ),
+    );
+  }
+
+  return value;
+}
+
+function auditPackageDigest(value) {
+  const canonical =
+    canonicalAuditValue(value);
+
+  return createHash('sha256')
+    .update(
+      JSON.stringify(canonical),
+    )
+    .digest('hex');
+}
+
+function getEvidenceIntegrityPackage(
+  database,
+  sessionId,
+  evidenceRoot,
+) {
+  const rows = database.prepare(`
+    SELECT
+      e.id,
+      e.evidence_code AS evidenceCode,
+      e.evidence_type AS type,
+      e.relative_path AS relativePath,
+      e.mime_type AS mimeType,
+      e.byte_size AS byteSize,
+      e.sha256,
+      e.created_at AS createdAt,
+      o.id AS observationId,
+      o.observation_code AS observationCode,
+      o.provisional_code AS provisionalCode,
+      a.asset_code AS assetCode
+    FROM evidence_files e
+    JOIN observations o
+      ON o.id = e.observation_id
+    LEFT JOIN assets a
+      ON a.id = o.asset_id
+    WHERE
+      e.inventory_session_id = ?
+      AND e.active = 1
+      AND o.active = 1
+    ORDER BY e.id
+  `).all(sessionId);
+
+  let available = 0;
+  let missing = 0;
+  let invalid = 0;
+
+  const files = rows.map(
+    (record) => {
+      const state =
+        inspectEvidenceFile(
+          record,
+          evidenceRoot,
+          {
+            verifyHash: true,
+          },
+        );
+
+      if (state.state === 'available') {
+        available += 1;
+      }
+
+      if (state.state === 'missing') {
+        missing += 1;
+      }
+
+      if (state.state === 'invalid') {
+        invalid += 1;
+      }
+
+      return {
+        id: record.id,
+        evidenceCode:
+          record.evidenceCode,
+        observationId:
+          record.observationId,
+        observationCode:
+          record.observationCode,
+        displayCode:
+          record.assetCode
+          || record.provisionalCode
+          || record.observationCode,
+        type: record.type,
+        mimeType: record.mimeType,
+        byteSize: record.byteSize,
+        sha256: record.sha256,
+        createdAt: record.createdAt,
+        available: state.available,
+        state: state.state,
+      };
+    },
+  );
+
+  const exceptions =
+    database.prepare(`
+      SELECT COUNT(*) AS count
+      FROM evidence_exceptions x
+      JOIN observations o
+        ON o.id = x.observation_id
+      WHERE
+        x.inventory_session_id = ?
+        AND o.active = 1
+    `).get(sessionId).count;
+
+  return {
+    activeFiles: files.length,
+    available,
+    missing,
+    invalid,
+    exceptions,
+    integrityOk:
+      missing === 0
+      && invalid === 0,
+    files,
+  };
+}
+
+function getObservationLifecycle(
+  database,
+  sessionId,
+) {
+  const counts =
+    database.prepare(`
+      SELECT
+        COUNT(*) AS totalVersions,
+        COALESCE(SUM(
+          CASE WHEN active = 1
+          THEN 1 ELSE 0 END
+        ), 0) AS activeRecords,
+        COALESCE(SUM(
+          CASE WHEN active = 0
+          THEN 1 ELSE 0 END
+        ), 0) AS historicalRecords,
+        COALESCE(MAX(version_number), 0)
+          AS highestVersion
+      FROM observations
+      WHERE inventory_session_id = ?
+    `).get(sessionId);
+
+  const auditCounts =
+    database.prepare(`
+      SELECT
+        COALESCE(SUM(
+          CASE
+            WHEN action_code =
+              'observation_corrected'
+            THEN 1 ELSE 0
+          END
+        ), 0) AS corrections,
+
+        COALESCE(SUM(
+          CASE
+            WHEN action_code =
+              'observation_annulled'
+            THEN 1 ELSE 0
+          END
+        ), 0) AS observationAnnulments,
+
+        COALESCE(SUM(
+          CASE
+            WHEN action_code =
+              'evidence_annulled'
+            THEN 1 ELSE 0
+          END
+        ), 0) AS evidenceAnnulments,
+
+        COALESCE(SUM(
+          CASE
+            WHEN action_code =
+              'undo_last_observation'
+            THEN 1 ELSE 0
+          END
+        ), 0) AS reversals
+
+      FROM audit_log
+      WHERE inventory_session_id = ?
+    `).get(sessionId);
+
+  return {
+    totalVersions:
+      counts.totalVersions,
+    activeRecords:
+      counts.activeRecords,
+    historicalRecords:
+      counts.historicalRecords,
+    highestVersion:
+      counts.highestVersion,
+    corrections:
+      auditCounts.corrections,
+    observationAnnulments:
+      auditCounts.observationAnnulments,
+    evidenceAnnulments:
+      auditCounts.evidenceAnnulments,
+    reversals:
+      auditCounts.reversals,
+  };
+}
+
+function createAuditPackage(
+  database,
+  sessionId,
+  evidenceRoot,
+) {
+  const summary =
+    getSessionSummary(
+      database,
+      sessionId,
+    );
+
+  if (!summary) return null;
+
+  const audit =
+    getSessionAudit(
+      database,
+      sessionId,
+    );
+
+  const incidences =
+    getSessionIncidences(
+      database,
+      sessionId,
+      evidenceRoot,
+    );
+
+  const evidenceIntegrity =
+    getEvidenceIntegrityPackage(
+      database,
+      sessionId,
+      evidenceRoot,
+    );
+
+  const lifecycle =
+    getObservationLifecycle(
+      database,
+      sessionId,
+    );
+
+  const generatedAt =
+    new Date().toISOString();
+
+  const packageCode =
+    `AUD-S${sessionId}-L${summary.locationId}`;
+
+  const manifestBase = {
+    schemaVersion: 1,
+    packageCode,
+    generatedAt,
+    sessionId,
+    locationId:
+      summary.locationId,
+
+    direction:
+      summary.direction,
+
+    department:
+      summary.department,
+
+    section:
+      summary.section,
+
+    auditEvents:
+      audit.length,
+
+    incidences:
+      incidences.length,
+
+    evidenceFiles:
+      evidenceIntegrity.activeFiles,
+
+    evidenceIntegrity:
+      evidenceIntegrity.integrityOk
+        ? 'PASS'
+        : 'REVIEW',
+  };
+
+  const snapshot = {
+    summary,
+    lifecycle,
+    evidenceIntegrity,
+    incidences,
+    audit,
+  };
+
+  const digestSha256 =
+    auditPackageDigest({
+      manifest:
+        manifestBase,
+      snapshot,
+    });
+
+  return {
+    manifest: {
+      ...manifestBase,
+      digestSha256,
+    },
+    summary,
+    lifecycle,
+    evidenceIntegrity,
+    incidences,
+    audit,
+  };
+}
+
 function startOrResumeSession(database, locationId, identity = {}) {
   return database.transaction(() => {
     const openSessions = getOpenSessionSummaries(database, locationId);
@@ -1819,6 +2150,38 @@ export function createApiRouter(database, {
       ORDER BY COALESCE(completed_at, cancelled_at, started_at) DESC, id DESC
     `).all().map(({ id }) => getSessionSummary(database, id));
     response.json({ sessions });
+  });
+
+  router.get('/sessions/:id/audit-package', (request, response) => {
+    const sessionId =
+      sessionIdSchema.safeParse(
+        request.params.id,
+      );
+
+    if (!sessionId.success) {
+      return response.status(400).json({
+        error:
+          'Id de sesion invalido.',
+      });
+    }
+
+    const auditPackage =
+      createAuditPackage(
+        database,
+        sessionId.data,
+        evidenceRoot,
+      );
+
+    if (!auditPackage) {
+      return response.status(404).json({
+        error:
+          'Sesion no encontrada.',
+      });
+    }
+
+    return response.json({
+      package: auditPackage,
+    });
   });
 
   router.get('/sessions/:id/report', (request, response) => {

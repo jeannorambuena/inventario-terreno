@@ -409,6 +409,13 @@
               Imprimir vista f&iacute;sica
             </button>
 
+            <button id="open-audit-package"
+              type="button"
+              class="secondary"
+              disabled>
+              Expediente de auditor&iacute;a
+            </button>
+
             <button id="dashboard-presentation-mode"
               type="button"
               class="secondary dashboard-presentation-button"
@@ -578,6 +585,12 @@
                 aria-pressed="false">
                 Auditor&iacute;a
               </button>
+
+              <button type="button"
+                data-explorer-tab="dossier"
+                aria-pressed="false">
+                Expediente
+              </button>
             </nav>
 
             <section id="explorer-panel-expected"
@@ -740,6 +753,46 @@
               <div id="explorer-audit"
                 class="audit-timeline">
               </div>
+
+            </section>
+
+            <section id="explorer-panel-dossier"
+              class="explorer-panel audit-package-panel"
+              data-explorer-panel="dossier"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>
+                    Expediente de auditor&iacute;a
+                  </h3>
+
+                  <p>
+                    Acta t&eacute;cnica del levantamiento,
+                    trazabilidad e integridad documental.
+                  </p>
+                </div>
+
+                <div class="audit-package-actions no-print">
+                  <button id="export-audit-csv"
+                    type="button"
+                    class="secondary"
+                    disabled>
+                    Exportar auditor&iacute;a CSV
+                  </button>
+
+                  <button id="print-audit-package"
+                    type="button"
+                    class="secondary"
+                    disabled>
+                    Imprimir / Guardar PDF
+                  </button>
+                </div>
+              </div>
+
+              <article id="audit-package-sheet"
+                class="audit-package-sheet">
+              </article>
 
             </section>
 

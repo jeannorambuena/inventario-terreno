@@ -2301,3 +2301,300 @@ body.dashboard-presentation .dashboard-explorer {
     gap: .1rem;
   }
 }
+
+
+/* Audit package */
+
+.audit-package-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.audit-package-sheet {
+  display: grid;
+  gap: 1rem;
+  padding: clamp(1rem, 2vw, 1.5rem);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.audit-package-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: .9rem;
+  border-bottom: 2px solid var(--wada-slate);
+}
+
+.audit-package-kicker {
+  color: var(--accent-strong);
+  font-size: .62rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.audit-package-header h2 {
+  margin-top: .15rem;
+  color: var(--wada-slate);
+  font-size: 1.45rem;
+}
+
+.audit-package-header p {
+  margin-top: .2rem;
+  color: var(--muted);
+  font-size: .7rem;
+}
+
+.audit-package-status {
+  display: grid;
+  justify-items: end;
+  gap: .3rem;
+  min-width: 180px;
+}
+
+.audit-package-status strong {
+  color: var(--wada-slate);
+  font-size: .72rem;
+  font-family: monospace;
+}
+
+.audit-package-status span {
+  padding: .25rem .45rem;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--wada-slate);
+  font-size: .6rem;
+  font-weight: 900;
+}
+
+.audit-package-section {
+  display: grid;
+  gap: .65rem;
+}
+
+.audit-package-section > h3 {
+  padding-bottom: .3rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--wada-slate);
+  font-size: .9rem;
+}
+
+.audit-package-definitions {
+  display: grid;
+  grid-template-columns:
+    repeat(4, minmax(0, 1fr));
+  gap: .45rem;
+}
+
+.audit-package-definitions > div {
+  display: grid;
+  gap: .12rem;
+  padding: .5rem;
+  border: 1px solid var(--border);
+  border-radius: .35rem;
+  background: var(--surface-muted);
+}
+
+.audit-package-definitions span {
+  color: var(--muted);
+  font-size: .56rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.audit-package-definitions strong {
+  overflow-wrap: anywhere;
+  color: var(--wada-slate);
+  font-size: .69rem;
+}
+
+.audit-package-metrics {
+  display: grid;
+  grid-template-columns:
+    repeat(6, minmax(0, 1fr));
+  gap: .45rem;
+}
+
+.audit-package-metrics article {
+  display: grid;
+  gap: .2rem;
+  min-height: 5rem;
+  align-content: space-between;
+  padding: .55rem;
+  border: 1px solid var(--border);
+  border-radius: .35rem;
+  background: var(--surface-muted);
+}
+
+.audit-package-metrics span {
+  color: var(--muted);
+  font-size: .55rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.audit-package-metrics strong {
+  color: var(--wada-slate);
+  font-size: 1.15rem;
+}
+
+.audit-package-metrics small {
+  color: var(--muted);
+  font-size: .55rem;
+  line-height: 1.3;
+}
+
+.audit-package-incidences {
+  display: grid;
+  gap: .3rem;
+}
+
+.audit-package-incidences article {
+  display: grid;
+  grid-template-columns:
+    minmax(120px, .35fr)
+    minmax(220px, 1fr)
+    minmax(220px, .8fr);
+  gap: .5rem;
+  align-items: center;
+  padding: .42rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.audit-package-incidences strong {
+  color: var(--accent-strong);
+  font-size: .64rem;
+}
+
+.audit-package-incidences span {
+  color: var(--wada-slate);
+  font-size: .66rem;
+}
+
+.audit-package-incidences small {
+  color: var(--muted);
+  font-size: .57rem;
+}
+
+.audit-package-manifest {
+  padding: .75rem;
+  border: 1px solid var(--border);
+  border-radius: .45rem;
+  background: var(--surface-muted);
+}
+
+.audit-package-digest {
+  display: grid;
+  gap: .25rem;
+  margin-top: .25rem;
+}
+
+.audit-package-digest span {
+  color: var(--muted);
+  font-size: .57rem;
+  font-weight: 900;
+}
+
+.audit-package-digest code {
+  overflow-wrap: anywhere;
+  padding: .5rem;
+  border-radius: .3rem;
+  background: #fff;
+  color: var(--wada-slate);
+  font-size: .62rem;
+}
+
+.audit-package-methodology {
+  display: grid;
+  gap: .25rem;
+  padding: .7rem;
+  border-left: 4px solid var(--info);
+  background: var(--surface-muted);
+}
+
+.audit-package-methodology strong {
+  color: var(--wada-slate);
+  font-size: .7rem;
+}
+
+.audit-package-methodology p {
+  color: var(--text);
+  font-size: .66rem;
+  line-height: 1.5;
+}
+
+
+@media (max-width: 1050px) {
+  .audit-package-metrics {
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+  }
+
+  .audit-package-definitions {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .audit-package-header {
+    flex-direction: column;
+  }
+
+  .audit-package-status {
+    justify-items: start;
+  }
+
+  .audit-package-definitions {
+    grid-template-columns: 1fr;
+  }
+
+  .audit-package-metrics {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+  }
+
+  .audit-package-incidences article {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* Impresion exclusiva del expediente */
+
+@media print {
+  body.print-audit-package * {
+    visibility: hidden !important;
+  }
+
+  body.print-audit-package
+  #audit-package-sheet,
+  body.print-audit-package
+  #audit-package-sheet * {
+    visibility: visible !important;
+  }
+
+  body.print-audit-package
+  #audit-package-sheet {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+  }
+
+  body.print-audit-package
+  .audit-package-section {
+    break-inside: avoid;
+  }
+
+  body.print-audit-package
+  .audit-event__body {
+    break-inside: avoid;
+  }
+}

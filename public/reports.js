@@ -64,6 +64,10 @@ const elements = {
   traceSearchDetail: document.querySelector('#trace-search-detail'),
   traceSearchDetailTitle: document.querySelector('#trace-search-detail-title'),
   traceSearchTimeline: document.querySelector('#trace-search-timeline'),
+  openAuditPackage: document.querySelector('#open-audit-package'),
+  auditPackageSheet: document.querySelector('#audit-package-sheet'),
+  printAuditPackage: document.querySelector('#print-audit-package'),
+  exportAuditCsv: document.querySelector('#export-audit-csv'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -111,6 +115,7 @@ const state = {
   explorerAuditEvents: [],
   explorerAuditQuery: '',
   explorerAuditFilter: 'all',
+  explorerAuditPackage: null,
 };
 
 async function api(path) {
@@ -464,6 +469,7 @@ function restoreDashboardQueryState() {
       'physical',
       'summary',
       'audit',
+      'dossier',
     ].includes(tab)
   ) {
     state.explorerTab = tab;
@@ -2410,6 +2416,812 @@ function createExplorerStateBadge(
 }
 
 
+
+
+function appendAuditPackageDefinition(
+  container,
+  label,
+  value,
+) {
+  const item =
+    document.createElement('div');
+
+  const term =
+    document.createElement('span');
+
+  term.textContent = label;
+
+  const content =
+    document.createElement('strong');
+
+  content.textContent =
+    value ?? '\u2014';
+
+  item.append(
+    term,
+    content,
+  );
+
+  container.append(item);
+}
+
+function appendAuditPackageMetric(
+  container,
+  label,
+  value,
+  detail,
+) {
+  const item =
+    document.createElement('article');
+
+  const span =
+    document.createElement('span');
+
+  span.textContent = label;
+
+  const strong =
+    document.createElement('strong');
+
+  strong.textContent =
+    String(value);
+
+  const small =
+    document.createElement('small');
+
+  small.textContent = detail;
+
+  item.append(
+    span,
+    strong,
+    small,
+  );
+
+  container.append(item);
+}
+
+function renderAuditPackage(
+  packageData,
+) {
+  elements.auditPackageSheet
+    .replaceChildren();
+
+  if (!packageData) {
+    const empty =
+      document.createElement('p');
+
+    empty.className =
+      'empty-report';
+
+    empty.textContent =
+      'Esta seccion aun no tiene una sesion '
+      + 'de levantamiento para generar expediente.';
+
+    elements.auditPackageSheet
+      .append(empty);
+
+    return;
+  }
+
+  const {
+    manifest,
+    summary,
+    lifecycle,
+    evidenceIntegrity,
+    incidences,
+    audit,
+  } = packageData;
+
+  const header =
+    document.createElement('header');
+
+  header.className =
+    'audit-package-header';
+
+  const title =
+    document.createElement('div');
+
+  const kicker =
+    document.createElement('span');
+
+  kicker.className =
+    'audit-package-kicker';
+
+  kicker.textContent =
+    'EXPEDIENTE DE AUDITORIA '
+    + 'DE INVENTARIO FISICO';
+
+  const heading =
+    document.createElement('h2');
+
+  heading.textContent =
+    summary.section
+    || 'Seccion sin nombre';
+
+  const hierarchy =
+    document.createElement('p');
+
+  hierarchy.textContent =
+    `${summary.direction} / `
+    + `${summary.department} / `
+    + `${summary.section}`;
+
+  title.append(
+    kicker,
+    heading,
+    hierarchy,
+  );
+
+  const status =
+    document.createElement('div');
+
+  status.className =
+    'audit-package-status';
+
+  const code =
+    document.createElement('strong');
+
+  code.textContent =
+    manifest.packageCode;
+
+  const badge =
+    document.createElement('span');
+
+  badge.textContent =
+    stateLabel(
+      summary.status,
+    );
+
+  status.append(
+    code,
+    badge,
+  );
+
+  header.append(
+    title,
+    status,
+  );
+
+
+  const identity =
+    document.createElement('section');
+
+  identity.className =
+    'audit-package-section';
+
+  const identityTitle =
+    document.createElement('h3');
+
+  identityTitle.textContent =
+    'Identificacion del levantamiento';
+
+  const identityGrid =
+    document.createElement('div');
+
+  identityGrid.className =
+    'audit-package-definitions';
+
+  for (const item of [
+    [
+      'Direccion',
+      summary.direction,
+    ],
+    [
+      'Departamento',
+      summary.department,
+    ],
+    [
+      'Seccion',
+      summary.section,
+    ],
+    [
+      'Sesion',
+      String(summary.id),
+    ],
+    [
+      'Operador',
+      summary.operatorCode
+      || 'Sin dato',
+    ],
+    [
+      'Dispositivo',
+      summary.deviceCode
+      || 'Sin dato',
+    ],
+    [
+      'Inicio',
+      dateTime(
+        summary.startedAt,
+      ),
+    ],
+    [
+      'Cierre',
+      summary.completedAt
+        ? dateTime(summary.completedAt)
+        : (
+          summary.cancelledAt
+            ? dateTime(summary.cancelledAt)
+            : 'Sesion abierta'
+        ),
+    ],
+  ]) {
+    appendAuditPackageDefinition(
+      identityGrid,
+      ...item,
+    );
+  }
+
+  identity.append(
+    identityTitle,
+    identityGrid,
+  );
+
+
+  const results =
+    document.createElement('section');
+
+  results.className =
+    'audit-package-section';
+
+  const resultsTitle =
+    document.createElement('h3');
+
+  resultsTitle.textContent =
+    'Resultado fisico';
+
+  const metrics =
+    document.createElement('div');
+
+  metrics.className =
+    'audit-package-metrics';
+
+  const physicalFindings =
+    number(
+      summary.hallazgosProvisionales,
+    );
+
+  for (const item of [
+    [
+      'Esperados',
+      number(summary.bienesEsperados),
+      'Universo maestro',
+    ],
+    [
+      'Revisados',
+      number(
+        summary.bienesEsperadosRevisados,
+      ),
+      `${number(
+        summary.porcentajeRevision,
+      )}% de cobertura`,
+    ],
+    [
+      'Conformes',
+      number(summary.bienesConformes),
+      'Resultado vigente',
+    ],
+    [
+      'Incidencias',
+      number(summary.incidencias),
+      'Registros que requieren seguimiento',
+    ],
+    [
+      'Hallazgos adicionales',
+      physicalFindings,
+      'Objetos fisicos fuera del universo esperado',
+    ],
+    [
+      'Pendientes',
+      number(summary.pendientes),
+      'Bienes esperados sin resultado',
+    ],
+  ]) {
+    appendAuditPackageMetric(
+      metrics,
+      ...item,
+    );
+  }
+
+  results.append(
+    resultsTitle,
+    metrics,
+  );
+
+
+  const integrity =
+    document.createElement('section');
+
+  integrity.className =
+    'audit-package-section';
+
+  const integrityTitle =
+    document.createElement('h3');
+
+  integrityTitle.textContent =
+    'Integridad documental y evidencia';
+
+  const integrityMetrics =
+    document.createElement('div');
+
+  integrityMetrics.className =
+    'audit-package-metrics';
+
+  for (const item of [
+    [
+      'Evidencias activas',
+      evidenceIntegrity.activeFiles,
+      'Archivos vinculados a registros vigentes',
+    ],
+    [
+      'Verificadas',
+      evidenceIntegrity.available,
+      'Ruta, tamano y SHA-256 correctos',
+    ],
+    [
+      'Faltantes',
+      evidenceIntegrity.missing,
+      'Archivo no disponible',
+    ],
+    [
+      'Invalidas',
+      evidenceIntegrity.invalid,
+      'Tamano o SHA-256 no coincide',
+    ],
+    [
+      'Excepciones',
+      evidenceIntegrity.exceptions,
+      'Excepciones documentadas',
+    ],
+    [
+      'Estado integridad',
+      evidenceIntegrity.integrityOk
+        ? 'PASS'
+        : 'REVISAR',
+      'Verificacion al generar el expediente',
+    ],
+  ]) {
+    appendAuditPackageMetric(
+      integrityMetrics,
+      ...item,
+    );
+  }
+
+  integrity.append(
+    integrityTitle,
+    integrityMetrics,
+  );
+
+
+  const trace =
+    document.createElement('section');
+
+  trace.className =
+    'audit-package-section';
+
+  const traceTitle =
+    document.createElement('h3');
+
+  traceTitle.textContent =
+    'Trazabilidad';
+
+  const traceMetrics =
+    document.createElement('div');
+
+  traceMetrics.className =
+    'audit-package-metrics';
+
+  for (const item of [
+    [
+      'Eventos',
+      audit.length,
+      'Audit log de la sesion',
+    ],
+    [
+      'Registros vigentes',
+      lifecycle.activeRecords,
+      'Estado actual',
+    ],
+    [
+      'Versiones historicas',
+      lifecycle.historicalRecords,
+      'Conservadas para auditoria',
+    ],
+    [
+      'Correcciones',
+      lifecycle.corrections,
+      'Correcciones auditadas',
+    ],
+    [
+      'Anulaciones',
+      (
+        lifecycle.observationAnnulments
+        + lifecycle.evidenceAnnulments
+      ),
+      'Registros o evidencias anulados',
+    ],
+    [
+      'Reversiones',
+      lifecycle.reversals,
+      'Deshacer ultimo registro',
+    ],
+  ]) {
+    appendAuditPackageMetric(
+      traceMetrics,
+      ...item,
+    );
+  }
+
+  trace.append(
+    traceTitle,
+    traceMetrics,
+  );
+
+
+  const incidenceSection =
+    document.createElement('section');
+
+  incidenceSection.className =
+    'audit-package-section';
+
+  const incidenceTitle =
+    document.createElement('h3');
+
+  incidenceTitle.textContent =
+    `Incidencias vigentes (${incidences.length})`;
+
+  const incidenceList =
+    document.createElement('div');
+
+  incidenceList.className =
+    'audit-package-incidences';
+
+  for (const incidence of incidences) {
+    const row =
+      document.createElement('article');
+
+    const code =
+      document.createElement('strong');
+
+    code.textContent =
+      incidence.displayCode;
+
+    const name =
+      document.createElement('span');
+
+    name.textContent =
+      incidence.assetName;
+
+    const meta =
+      document.createElement('small');
+
+    meta.textContent =
+      `${incidence.presenceCondition} \u00b7 `
+      + `prioridad ${incidence.priority} \u00b7 `
+      + `${number(incidence.evidenceCount)} evidencia(s)`;
+
+    row.append(
+      code,
+      name,
+      meta,
+    );
+
+    incidenceList.append(row);
+  }
+
+  if (incidences.length === 0) {
+    const empty =
+      document.createElement('p');
+
+    empty.className =
+      'empty-report';
+
+    empty.textContent =
+      'No existen incidencias vigentes.';
+
+    incidenceList.append(empty);
+  }
+
+  incidenceSection.append(
+    incidenceTitle,
+    incidenceList,
+  );
+
+
+  const history =
+    document.createElement('section');
+
+  history.className =
+    'audit-package-section '
+    + 'audit-package-history';
+
+  const historyTitle =
+    document.createElement('h3');
+
+  historyTitle.textContent =
+    `Historial de auditoria (${audit.length})`;
+
+  const timeline =
+    document.createElement('div');
+
+  timeline.className =
+    'audit-timeline';
+
+  renderAuditTimeline(
+    audit,
+    timeline,
+  );
+
+  history.append(
+    historyTitle,
+    timeline,
+  );
+
+
+  const manifestSection =
+    document.createElement('section');
+
+  manifestSection.className =
+    'audit-package-section '
+    + 'audit-package-manifest';
+
+  const manifestTitle =
+    document.createElement('h3');
+
+  manifestTitle.textContent =
+    'Manifiesto tecnico';
+
+  const manifestGrid =
+    document.createElement('div');
+
+  manifestGrid.className =
+    'audit-package-definitions';
+
+  appendAuditPackageDefinition(
+    manifestGrid,
+    'Codigo expediente',
+    manifest.packageCode,
+  );
+
+  appendAuditPackageDefinition(
+    manifestGrid,
+    'Version esquema',
+    String(
+      manifest.schemaVersion,
+    ),
+  );
+
+  appendAuditPackageDefinition(
+    manifestGrid,
+    'Fecha de corte',
+    dateTime(
+      manifest.generatedAt,
+    ),
+  );
+
+  appendAuditPackageDefinition(
+    manifestGrid,
+    'Integridad evidencia',
+    manifest.evidenceIntegrity,
+  );
+
+  const digest =
+    document.createElement('div');
+
+  digest.className =
+    'audit-package-digest';
+
+  const digestLabel =
+    document.createElement('span');
+
+  digestLabel.textContent =
+    'SHA-256 DEL SNAPSHOT';
+
+  const digestCode =
+    document.createElement('code');
+
+  digestCode.textContent =
+    manifest.digestSha256;
+
+  digest.append(
+    digestLabel,
+    digestCode,
+  );
+
+  manifestSection.append(
+    manifestTitle,
+    manifestGrid,
+    digest,
+  );
+
+
+  const methodology =
+    document.createElement('section');
+
+  methodology.className =
+    'audit-package-methodology';
+
+  const methodologyTitle =
+    document.createElement('strong');
+
+  methodologyTitle.textContent =
+    'Alcance del expediente';
+
+  const methodologyText =
+    document.createElement('p');
+
+  methodologyText.textContent =
+    'Este expediente representa el estado '
+    + 'registrado por el sistema al momento '
+    + 'del corte. El inventario maestro se '
+    + 'mantiene separado del levantamiento '
+    + 'fisico. Los hallazgos, incidencias, '
+    + 'correcciones y anulaciones conservan '
+    + 'su trazabilidad y no constituyen por '
+    + 'si solos una regularizacion '
+    + 'administrativa del bien.';
+
+  methodology.append(
+    methodologyTitle,
+    methodologyText,
+  );
+
+
+  elements.auditPackageSheet.append(
+    header,
+    identity,
+    results,
+    integrity,
+    trace,
+    incidenceSection,
+    history,
+    manifestSection,
+    methodology,
+  );
+}
+
+function openAuditPackageView() {
+  if (!state.explorerAuditPackage) {
+    return;
+  }
+
+  setExplorerTab(
+    'dossier',
+  );
+
+  document.querySelector(
+    '#explorer-panel-dossier',
+  )?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  });
+}
+
+function printAuditPackageView() {
+  if (!state.explorerAuditPackage) {
+    return;
+  }
+
+  document.body.classList.add(
+    'print-audit-package',
+  );
+
+  window.print();
+
+  window.setTimeout(
+    () => {
+      document.body.classList.remove(
+        'print-audit-package',
+      );
+    },
+    250,
+  );
+}
+
+function downloadAuditCsv() {
+  if (
+    !state.explorerAuditPackage
+    || !state.explorerSection
+  ) {
+    return;
+  }
+
+  const rows = [[
+    'Id evento',
+    'Fecha',
+    'Accion',
+    'Codigo',
+    'Bien',
+    'Operador',
+    'Dispositivo',
+    'Version',
+    'Estado registro',
+    'Motivo',
+  ]];
+
+  for (
+    const event
+    of state.explorerAuditEvents
+  ) {
+    const action =
+      auditActionDefinition(
+        event.actionCode,
+      );
+
+    rows.push([
+      event.id,
+      dateTime(event.createdAt),
+      action.label,
+      event.displayCode
+        || event.entityCode
+        || '',
+      event.assetName || '',
+      event.operatorCode || '',
+      event.deviceCode || '',
+      event.versionNumber || '',
+      event.observationActive === true
+        ? 'VIGENTE'
+        : (
+          event.observationActive === false
+            ? 'HISTORICO'
+            : ''
+        ),
+      auditReason(event),
+    ]);
+  }
+
+  const content =
+    '\uFEFF'
+    + rows
+      .map(
+        (row) =>
+          row.map(csvValue).join(';'),
+      )
+      .join('\r\n');
+
+  const blob =
+    new Blob(
+      [content],
+      {
+        type:
+          'text/csv;charset=utf-8',
+      },
+    );
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement('a');
+
+  const safeSection =
+    String(
+      state.explorerSection.section
+      || 'seccion',
+    )
+      .normalize('NFD')
+      .replace(
+        /[\u0300-\u036f]/g,
+        '',
+      )
+      .replace(
+        /[^a-zA-Z0-9_-]+/g,
+        '-',
+      )
+      .replace(
+        /^-+|-+$/g,
+        '',
+      );
+
+  link.href = url;
+
+  link.download =
+    `auditoria-${safeSection || 'seccion'}.csv`;
+
+  document.body.append(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+}
 
 function auditActionDefinition(
   actionCode,
@@ -4712,13 +5524,14 @@ async function refreshExplorerSection({
     let observations = [];
     let report = null;
     let audit = [];
+    let auditPackage = null;
 
     if (section.sessionId) {
       const [
         assetsResult,
         observationsResult,
         reportResult,
-        auditResult,
+        auditPackageResult,
       ] = await Promise.all([
         api(
           `/api/assets?locationId=${section.locationId}`,
@@ -4730,7 +5543,7 @@ async function refreshExplorerSection({
           `/api/sessions/${section.sessionId}/report`,
         ),
         api(
-          `/api/sessions/${section.sessionId}/audit`,
+          `/api/sessions/${section.sessionId}/audit-package`,
         ),
       ]);
 
@@ -4743,8 +5556,11 @@ async function refreshExplorerSection({
       report =
         reportResult.report || null;
 
+      auditPackage =
+        auditPackageResult.package || null;
+
       audit =
-        auditResult.audit || [];
+        auditPackage?.audit || [];
 
     } else {
       const assetsResult = await api(
@@ -4764,6 +5580,8 @@ async function refreshExplorerSection({
       observations;
     state.explorerReport = report;
     state.explorerAuditEvents = audit;
+    state.explorerAuditPackage =
+      auditPackage;
 
     renderExplorerMetrics(section);
 
@@ -4792,6 +5610,10 @@ async function refreshExplorerSection({
       audit,
     );
 
+    renderAuditPackage(
+      auditPackage,
+    );
+
     renderExplorerPhysical(
       assets,
       observations,
@@ -4814,6 +5636,18 @@ async function refreshExplorerSection({
 
     elements.exportSectionCsv.disabled = false;
     elements.printPhysicalView.disabled = false;
+
+    const packageReady =
+      Boolean(auditPackage);
+
+    elements.openAuditPackage.disabled =
+      !packageReady;
+
+    elements.printAuditPackage.disabled =
+      !packageReady;
+
+    elements.exportAuditCsv.disabled =
+      !packageReady;
 
     elements.explorerStatus.textContent =
       section.sessionId
@@ -4847,6 +5681,11 @@ async function selectExplorerSection() {
   if (!section) {
     state.explorerLocationId = null;
     state.explorerSessionId = null;
+    state.explorerAuditPackage = null;
+
+    elements.openAuditPackage.disabled = true;
+    elements.printAuditPackage.disabled = true;
+    elements.exportAuditCsv.disabled = true;
 
     elements.explorerContent.hidden = true;
     elements.explorerEmpty.hidden = false;
@@ -5483,6 +6322,22 @@ document.querySelectorAll(
 );
 
 
+
+
+elements.openAuditPackage.addEventListener(
+  'click',
+  openAuditPackageView,
+);
+
+elements.printAuditPackage.addEventListener(
+  'click',
+  printAuditPackageView,
+);
+
+elements.exportAuditCsv.addEventListener(
+  'click',
+  downloadAuditCsv,
+);
 
 elements.explorerAuditSearch.addEventListener(
   'input',
