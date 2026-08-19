@@ -54,6 +54,16 @@ const elements = {
   executiveQueryCopyLink: document.querySelector('#executive-query-copy-link'),
   executiveQueryExport: document.querySelector('#executive-query-export'),
   executiveQueryNarrative: document.querySelector('#executive-query-narrative'),
+  explorerAudit: document.querySelector('#explorer-audit'),
+  explorerAuditCount: document.querySelector('#explorer-audit-count'),
+  explorerAuditFilter: document.querySelector('#explorer-audit-filter'),
+  explorerAuditSearch: document.querySelector('#explorer-audit-search'),
+  traceSearchInput: document.querySelector('#trace-search-input'),
+  traceSearchButton: document.querySelector('#trace-search-button'),
+  traceSearchResults: document.querySelector('#trace-search-results'),
+  traceSearchDetail: document.querySelector('#trace-search-detail'),
+  traceSearchDetailTitle: document.querySelector('#trace-search-detail-title'),
+  traceSearchTimeline: document.querySelector('#trace-search-timeline'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -98,6 +108,9 @@ const state = {
   explorerReport: null,
   explorerSection: null,
   explorerQuery: '',
+  explorerAuditEvents: [],
+  explorerAuditQuery: '',
+  explorerAuditFilter: 'all',
 };
 
 async function api(path) {
@@ -450,6 +463,7 @@ function restoreDashboardQueryState() {
       'evidence',
       'physical',
       'summary',
+      'audit',
     ].includes(tab)
   ) {
     state.explorerTab = tab;
@@ -2396,6 +2410,651 @@ function createExplorerStateBadge(
 }
 
 
+
+function auditActionDefinition(
+  actionCode,
+) {
+  const definitions = {
+    session_created: {
+      label: 'Sesion iniciada',
+      category: 'session',
+      tone: 'info',
+    },
+
+    session_closed: {
+      label: 'Sesion cerrada',
+      category: 'session',
+      tone: 'success',
+    },
+
+    session_cancelled: {
+      label: 'Sesion cancelada',
+      category: 'session',
+      tone: 'danger',
+    },
+
+    observation_created: {
+      label: 'Registro creado',
+      category: 'observation',
+      tone: 'info',
+    },
+
+    observation_not_found_created: {
+      label: 'No encontrado registrado',
+      category: 'observation',
+      tone: 'warning',
+    },
+
+    observation_corrected: {
+      label: 'Registro corregido',
+      category: 'correction',
+      tone: 'warning',
+    },
+
+    observation_annulled: {
+      label: 'Registro anulado',
+      category: 'correction',
+      tone: 'danger',
+    },
+
+    undo_last_observation: {
+      label: 'Registro revertido',
+      category: 'correction',
+      tone: 'danger',
+    },
+
+    evidence_created: {
+      label: 'Evidencia agregada',
+      category: 'evidence',
+      tone: 'success',
+    },
+
+    evidence_annulled: {
+      label: 'Evidencia anulada',
+      category: 'evidence',
+      tone: 'danger',
+    },
+
+    evidence_exception_created: {
+      label: 'Excepcion de evidencia',
+      category: 'evidence',
+      tone: 'warning',
+    },
+
+    mobile_pairing_created: {
+      label: 'Acceso movil creado',
+      category: 'session',
+      tone: 'info',
+    },
+
+    mobile_pairing_renewed: {
+      label: 'Acceso movil renovado',
+      category: 'session',
+      tone: 'info',
+    },
+
+    mobile_pairing_revoked: {
+      label: 'Acceso movil revocado',
+      category: 'session',
+      tone: 'neutral',
+    },
+  };
+
+  return definitions[actionCode] || {
+    label:
+      String(actionCode || 'evento')
+        .replaceAll('_', ' '),
+
+    category: 'observation',
+    tone: 'neutral',
+  };
+}
+
+function auditReason(event) {
+  return (
+    event.payload?.details?.reasonCode
+    || event.payload?.details?.reason
+    || ''
+  );
+}
+
+function auditEventMatches(
+  event,
+  query,
+) {
+  const normalized =
+    String(query || '')
+      .trim()
+      .toLocaleLowerCase('es');
+
+  if (!normalized) return true;
+
+  const action =
+    auditActionDefinition(
+      event.actionCode,
+    );
+
+  const searchable = [
+    action.label,
+    event.actionCode,
+    event.displayCode,
+    event.assetCode,
+    event.scannerCode,
+    event.provisionalCode,
+    event.observationCode,
+    event.assetName,
+    event.operatorCode,
+    event.deviceCode,
+    auditReason(event),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLocaleLowerCase('es');
+
+  return searchable.includes(
+    normalized,
+  );
+}
+
+function appendAuditTimelineEvent(
+  container,
+  event,
+) {
+  const definition =
+    auditActionDefinition(
+      event.actionCode,
+    );
+
+  const article =
+    document.createElement('article');
+
+  article.className =
+    `audit-event audit-event--${definition.tone}`;
+
+  const rail =
+    document.createElement('div');
+
+  rail.className =
+    'audit-event__rail';
+
+  const dot =
+    document.createElement('span');
+
+  dot.className =
+    'audit-event__dot';
+
+  rail.append(dot);
+
+  const body =
+    document.createElement('div');
+
+  body.className =
+    'audit-event__body';
+
+  const top =
+    document.createElement('div');
+
+  top.className =
+    'audit-event__top';
+
+  const action =
+    document.createElement('strong');
+
+  action.textContent =
+    definition.label;
+
+  const timestamp =
+    document.createElement('time');
+
+  timestamp.textContent =
+    dateTime(event.createdAt);
+
+  top.append(
+    action,
+    timestamp,
+  );
+
+  const identity =
+    document.createElement('div');
+
+  identity.className =
+    'audit-event__identity';
+
+  const code =
+    document.createElement('strong');
+
+  code.textContent =
+    event.displayCode
+    || event.entityCode
+    || 'Sin codigo';
+
+  const name =
+    document.createElement('span');
+
+  name.textContent =
+    event.assetName
+    || (
+      event.entityType === 'session'
+        ? `Sesion ${event.sessionId}`
+        : event.entityType
+    );
+
+  identity.append(
+    code,
+    name,
+  );
+
+  const meta =
+    document.createElement('div');
+
+  meta.className =
+    'audit-event__meta';
+
+  const actor =
+    document.createElement('span');
+
+  const actorText = [
+    event.operatorCode,
+    event.deviceCode,
+  ]
+    .filter(Boolean)
+    .join(' / ');
+
+  actor.textContent =
+    actorText
+    || 'Identidad no registrada';
+
+  meta.append(actor);
+
+  if (event.versionNumber) {
+    const version =
+      document.createElement('span');
+
+    version.textContent =
+      `Version ${event.versionNumber}`;
+
+    meta.append(version);
+  }
+
+  if (
+    event.observationActive
+    !== null
+    && event.observationActive
+    !== undefined
+  ) {
+    const stateBadge =
+      document.createElement('span');
+
+    stateBadge.className =
+      event.observationActive
+        ? 'audit-current-state'
+        : 'audit-historical-state';
+
+    stateBadge.textContent =
+      event.observationActive
+        ? 'VIGENTE'
+        : 'HISTORICO';
+
+    meta.append(stateBadge);
+  }
+
+  const reason =
+    auditReason(event);
+
+  body.append(
+    top,
+    identity,
+    meta,
+  );
+
+  if (reason) {
+    const reasonNode =
+      document.createElement('small');
+
+    reasonNode.className =
+      'audit-event__reason';
+
+    reasonNode.textContent =
+      `Motivo: ${reason}`;
+
+    body.append(reasonNode);
+  }
+
+  article.append(
+    rail,
+    body,
+  );
+
+  container.append(article);
+}
+
+function renderAuditTimeline(
+  events,
+  container,
+  {
+    emptyMessage =
+      'No existen eventos de auditoria para mostrar.',
+  } = {},
+) {
+  container.replaceChildren();
+
+  for (const event of events) {
+    appendAuditTimelineEvent(
+      container,
+      event,
+    );
+  }
+
+  if (events.length === 0) {
+    const empty =
+      document.createElement('p');
+
+    empty.className =
+      'empty-report';
+
+    empty.textContent =
+      emptyMessage;
+
+    container.append(empty);
+  }
+}
+
+function renderExplorerAudit(
+  events = state.explorerAuditEvents,
+) {
+  const query =
+    state.explorerAuditQuery;
+
+  const category =
+    state.explorerAuditFilter;
+
+  const filtered =
+    events.filter(
+      (event) => {
+        const definition =
+          auditActionDefinition(
+            event.actionCode,
+          );
+
+        const categoryMatches =
+          category === 'all'
+          || definition.category
+            === category;
+
+        return (
+          categoryMatches
+          && auditEventMatches(
+            event,
+            query,
+          )
+        );
+      },
+    );
+
+  elements.explorerAuditCount.textContent =
+    query || category !== 'all'
+      ? `${filtered.length}/${events.length}`
+      : String(events.length);
+
+  renderAuditTimeline(
+    filtered,
+    elements.explorerAudit,
+    {
+      emptyMessage:
+        events.length
+          ? 'Ningun evento coincide con los filtros.'
+          : 'La seccion aun no tiene eventos de auditoria.',
+    },
+  );
+}
+
+function focusExplorerAudit(
+  code,
+) {
+  state.explorerAuditQuery =
+    String(code || '');
+
+  elements.explorerAuditSearch.value =
+    state.explorerAuditQuery;
+
+  state.explorerAuditFilter =
+    'all';
+
+  elements.explorerAuditFilter.value =
+    'all';
+
+  setExplorerTab('audit');
+
+  renderExplorerAudit();
+}
+
+function renderAssetAuditHistory(
+  asset,
+  observation,
+) {
+  const history =
+    state.explorerAuditEvents
+      .filter(
+        (event) =>
+          number(event.assetId)
+            === number(asset.id)
+          || (
+            observation?.observationCode
+            && event.observationCode
+              === observation.observationCode
+          ),
+      )
+      .slice(0, 10);
+
+  const heading =
+    document.createElement('h3');
+
+  heading.textContent =
+    'Historial y trazabilidad';
+
+  const timeline =
+    document.createElement('div');
+
+  timeline.className =
+    'audit-timeline audit-timeline--dossier';
+
+  renderAuditTimeline(
+    history,
+    timeline,
+    {
+      emptyMessage:
+        'No existen eventos de auditoria vinculados a este bien.',
+    },
+  );
+
+  elements.assetDialogContent.append(
+    heading,
+    timeline,
+  );
+}
+
+function renderTraceSearchResults(
+  matches,
+) {
+  elements.traceSearchResults
+    .replaceChildren();
+
+  elements.traceSearchDetail.hidden =
+    true;
+
+  for (const match of matches) {
+    const card =
+      document.createElement('article');
+
+    card.className =
+      'trace-search-result';
+
+    const body =
+      document.createElement('div');
+
+    const code =
+      document.createElement('strong');
+
+    code.textContent =
+      match.displayCode;
+
+    const name =
+      document.createElement('span');
+
+    name.textContent =
+      match.assetName;
+
+    const location =
+      document.createElement('small');
+
+    location.textContent =
+      `${match.direction} / `
+      + `${match.department} / `
+      + `${match.section} ? `
+      + `Sesion ${match.sessionId} ? `
+      + `${match.versions} version(es)`;
+
+    body.append(
+      code,
+      name,
+      location,
+    );
+
+    const button =
+      document.createElement('button');
+
+    button.type = 'button';
+    button.className = 'secondary';
+    button.textContent = 'Ver historial';
+
+    button.addEventListener(
+      'click',
+      () => loadTraceabilityMatch(
+        match,
+      ),
+    );
+
+    card.append(
+      body,
+      button,
+    );
+
+    elements.traceSearchResults.append(
+      card,
+    );
+  }
+
+  if (matches.length === 0) {
+    const empty =
+      document.createElement('p');
+
+    empty.className =
+      'empty-report';
+
+    empty.textContent =
+      'No se encontraron registros de terreno con ese criterio.';
+
+    elements.traceSearchResults.append(
+      empty,
+    );
+  }
+}
+
+async function loadTraceabilityMatch(
+  match,
+) {
+  try {
+    const result = await api(
+      `/api/sessions/${match.sessionId}/audit`,
+    );
+
+    const related =
+      (result.audit || []).filter(
+        (event) =>
+          event.entityType === 'session'
+          || (
+            match.assetId
+            && number(event.assetId)
+              === number(match.assetId)
+          )
+          || (
+            match.provisionalCode
+            && event.provisionalCode
+              === match.provisionalCode
+          ),
+      );
+
+    elements.traceSearchDetailTitle.textContent =
+      `${match.displayCode} ? ${match.assetName}`;
+
+    elements.traceSearchDetail.hidden =
+      false;
+
+    renderAuditTimeline(
+      related,
+      elements.traceSearchTimeline,
+      {
+        emptyMessage:
+          'No se encontraron eventos vinculados al registro.',
+      },
+    );
+
+    elements.traceSearchDetail.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+
+  } catch (error) {
+    setMessage(
+      error.message,
+      true,
+    );
+  }
+}
+
+async function searchGlobalTraceability() {
+  const query =
+    elements.traceSearchInput.value
+      .trim();
+
+  if (query.length < 2) {
+    elements.traceSearchResults
+      .replaceChildren();
+
+    const empty =
+      document.createElement('p');
+
+    empty.className =
+      'empty-report';
+
+    empty.textContent =
+      'Ingrese al menos dos caracteres.';
+
+    elements.traceSearchResults
+      .append(empty);
+
+    return;
+  }
+
+  try {
+    const result = await api(
+      `/api/audit/search?q=${
+        encodeURIComponent(query)
+      }`,
+    );
+
+    renderTraceSearchResults(
+      result.matches || [],
+    );
+
+  } catch (error) {
+    setMessage(
+      error.message,
+      true,
+    );
+  }
+}
+
 function explorerOutcome(observation) {
   const definitions = {
     verificado: {
@@ -3418,6 +4077,11 @@ function openAssetDossier(
     elements.assetDialogContent.append(actions);
   }
 
+  renderAssetAuditHistory(
+    asset,
+    observation,
+  );
+
   elements.assetDialog.showModal();
 }
 
@@ -3639,6 +4303,22 @@ function renderExplorerFindings(
     );
 
     actions.append(badge);
+
+    const historyButton =
+      document.createElement('button');
+
+    historyButton.type = 'button';
+    historyButton.className = 'secondary';
+    historyButton.textContent = 'Historial';
+
+    historyButton.addEventListener(
+      'click',
+      () => focusExplorerAudit(
+        finding.provisionalCode,
+      ),
+    );
+
+    actions.append(historyButton);
 
     if (incidence) {
       const button =
@@ -4031,12 +4711,14 @@ async function refreshExplorerSection({
     let assets = [];
     let observations = [];
     let report = null;
+    let audit = [];
 
     if (section.sessionId) {
       const [
         assetsResult,
         observationsResult,
         reportResult,
+        auditResult,
       ] = await Promise.all([
         api(
           `/api/assets?locationId=${section.locationId}`,
@@ -4046,6 +4728,9 @@ async function refreshExplorerSection({
         ),
         api(
           `/api/sessions/${section.sessionId}/report`,
+        ),
+        api(
+          `/api/sessions/${section.sessionId}/audit`,
         ),
       ]);
 
@@ -4057,6 +4742,9 @@ async function refreshExplorerSection({
 
       report =
         reportResult.report || null;
+
+      audit =
+        auditResult.audit || [];
 
     } else {
       const assetsResult = await api(
@@ -4075,6 +4763,7 @@ async function refreshExplorerSection({
     state.explorerObservations =
       observations;
     state.explorerReport = report;
+    state.explorerAuditEvents = audit;
 
     renderExplorerMetrics(section);
 
@@ -4097,6 +4786,10 @@ async function refreshExplorerSection({
 
     renderExplorerIncidenceMatrix(
       report,
+    );
+
+    renderExplorerAudit(
+      audit,
     );
 
     renderExplorerPhysical(
@@ -4789,6 +5482,45 @@ document.querySelectorAll(
   },
 );
 
+
+
+elements.explorerAuditSearch.addEventListener(
+  'input',
+  () => {
+    state.explorerAuditQuery =
+      elements.explorerAuditSearch.value
+      || '';
+
+    renderExplorerAudit();
+  },
+);
+
+elements.explorerAuditFilter.addEventListener(
+  'change',
+  () => {
+    state.explorerAuditFilter =
+      elements.explorerAuditFilter.value
+      || 'all';
+
+    renderExplorerAudit();
+  },
+);
+
+elements.traceSearchButton.addEventListener(
+  'click',
+  searchGlobalTraceability,
+);
+
+elements.traceSearchInput.addEventListener(
+  'keydown',
+  (event) => {
+    if (event.key !== 'Enter') return;
+
+    event.preventDefault();
+
+    searchGlobalTraceability();
+  },
+);
 
 elements.explorerSearch.addEventListener(
   'input',

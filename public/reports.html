@@ -266,6 +266,68 @@
           </div>
         </section>
 
+        <section id="traceability-search"
+          class="traceability-search no-print"
+          aria-labelledby="traceability-search-title">
+
+          <div class="traceability-search__heading">
+            <div>
+              <p class="section-kicker">
+                TRAZABILIDAD
+              </p>
+
+              <h2 id="traceability-search-title">
+                Buscar historial de un bien
+              </h2>
+
+              <p>
+                Busque por c&oacute;digo patrimonial,
+                c&oacute;digo provisional, esc&aacute;ner
+                o nombre del bien.
+              </p>
+            </div>
+          </div>
+
+          <div class="traceability-search__controls">
+            <input id="trace-search-input"
+              type="search"
+              autocomplete="off"
+              placeholder="Ej.: 01-06-00067 o PROV-S1-0003">
+
+            <button id="trace-search-button"
+              type="button">
+              Buscar trazabilidad
+            </button>
+          </div>
+
+          <div id="trace-search-results"
+            class="trace-search-results">
+          </div>
+
+          <section id="trace-search-detail"
+            class="trace-search-detail"
+            hidden>
+
+            <div class="trace-search-detail__heading">
+              <div>
+                <p class="section-kicker">
+                  EXPEDIENTE DE AUDITOR&Iacute;A
+                </p>
+
+                <h3 id="trace-search-detail-title">
+                  Historial
+                </h3>
+              </div>
+            </div>
+
+            <div id="trace-search-timeline"
+              class="audit-timeline">
+            </div>
+
+          </section>
+
+        </section>
+
         <section id="dashboard-priorities"
           class="dashboard-priorities no-print"
           aria-labelledby="dashboard-priorities-title">
@@ -510,6 +572,12 @@
                 aria-pressed="false">
                 Resumen ejecutivo
               </button>
+
+              <button type="button"
+                data-explorer-tab="audit"
+                aria-pressed="false">
+                Auditor&iacute;a
+              </button>
             </nav>
 
             <section id="explorer-panel-expected"
@@ -608,6 +676,69 @@
 
               <div id="explorer-physical"
                 class="explorer-physical-grid">
+              </div>
+
+            </section>
+
+            <section id="explorer-panel-audit"
+              class="explorer-panel"
+              data-explorer-panel="audit"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Auditor&iacute;a y trazabilidad</h3>
+                  <p>
+                    Historial cronol&oacute;gico de acciones,
+                    correcciones, anulaciones y evidencias.
+                  </p>
+                </div>
+
+                <span id="explorer-audit-count"
+                  class="count-badge">0</span>
+              </div>
+
+              <div class="audit-toolbar">
+
+                <label>
+                  Tipo de evento
+
+                  <select id="explorer-audit-filter">
+                    <option value="all">
+                      Todos
+                    </option>
+
+                    <option value="observation">
+                      Registros
+                    </option>
+
+                    <option value="correction">
+                      Correcciones / anulaciones
+                    </option>
+
+                    <option value="evidence">
+                      Evidencias
+                    </option>
+
+                    <option value="session">
+                      Sesi&oacute;n / acceso
+                    </option>
+                  </select>
+                </label>
+
+                <label>
+                  Buscar en historial
+
+                  <input id="explorer-audit-search"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="C&oacute;digo, acci&oacute;n, operador o dispositivo">
+                </label>
+
+              </div>
+
+              <div id="explorer-audit"
+                class="audit-timeline">
               </div>
 
             </section>

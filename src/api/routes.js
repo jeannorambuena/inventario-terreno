@@ -920,6 +920,418 @@ function prepareEvidenceFile({ evidenceRoot, file, session, code, evidenceType }
   };
 }
 
+
+function parseAuditPayload(value) {
+  if (!value) {
+    return {
+      before: null,
+      after: null,
+      details: null,
+    };
+  }
+
+  try {
+    const parsed =
+      JSON.parse(String(value));
+
+    if (
+      !parsed
+      || typeof parsed !== 'object'
+      || Array.isArray(parsed)
+    ) {
+      return {
+        before: null,
+        after: null,
+        details: null,
+      };
+    }
+
+    return {
+      before: parsed.before ?? null,
+      after: parsed.after ?? null,
+      details: parsed.details ?? null,
+    };
+
+  } catch {
+    return {
+      before: null,
+      after: null,
+      details: null,
+    };
+  }
+}
+
+function auditObservationIdentity(
+  database,
+  row,
+  payload,
+) {
+  let observation = null;
+
+  if (
+    row.entityType === 'observation'
+    && row.entityId
+  ) {
+    observation = database.prepare(`
+      SELECT
+        o.id AS observationId,
+        o.observation_code AS observationCode,
+        o.asset_id AS assetId,
+        o.provisional_code AS provisionalCode,
+        o.status_code AS observationStatus,
+        o.version_number AS versionNumber,
+        o.active,
+        o.observed_at AS observedAt,
+        a.asset_code AS assetCode,
+        a.scanner_code AS scannerCode,
+        a.name AS assetName,
+        d.details_json AS detailsJson
+      FROM observations o
+      LEFT JOIN assets a
+        ON a.id = o.asset_id
+      LEFT JOIN observation_details d
+        ON d.observation_id = o.id
+      WHERE o.id = ?
+    `).get(row.entityId) ?? null;
+  }
+
+  if (
+    !observation
+    && row.entityType === 'evidence'
+    && row.entityId
+  ) {
+    observation = database.prepare(`
+      SELECT
+        o.id AS observationId,
+        o.observation_code AS observationCode,
+        o.asset_id AS assetId,
+        o.provisional_code AS provisionalCode,
+        o.status_code AS observationStatus,
+        o.version_number AS versionNumber,
+        o.active,
+        o.observed_at AS observedAt,
+        a.asset_code AS assetCode,
+        a.scanner_code AS scannerCode,
+        a.name AS assetName,
+        d.details_json AS detailsJson
+      FROM evidence_files e
+      JOIN observations o
+        ON o.id = e.observation_id
+      LEFT JOIN assets a
+        ON a.id = o.asset_id
+      LEFT JOIN observation_details d
+        ON d.observation_id = o.id
+      WHERE e.id = ?
+    `).get(row.entityId) ?? null;
+  }
+
+  if (!observation) {
+    const assetId =
+      payload?.after?.assetId
+      ?? payload?.before?.assetId
+      ?? payload?.before?.asset_id
+      ?? null;
+
+    if (assetId) {
+      const asset = database.prepare(`
+        SELECT
+          id AS assetId,
+          asset_code AS assetCode,
+          scanner_code AS scannerCode,
+          name AS assetName
+        FROM assets
+        WHERE id = ?
+      `).get(assetId);
+
+      if (asset) {
+        return {
+          ...asset,
+          observationId: null,
+          observationCode: null,
+          provisionalCode: null,
+          observationStatus: null,
+          versionNumber: null,
+          observationActive: null,
+          observedAt: null,
+          displayCode:
+            asset.assetCode
+            || row.entityCode,
+        };
+      }
+    }
+
+    return {
+      observationId: null,
+      observationCode: null,
+      assetId: null,
+      assetCode: null,
+      scannerCode: null,
+      provisionalCode: null,
+      assetName: null,
+      observationStatus: null,
+      versionNumber: null,
+      observationActive: null,
+      observedAt: null,
+      displayCode: row.entityCode,
+    };
+  }
+
+  const fieldDetails =
+    parseDetails(
+      observation.detailsJson,
+    );
+
+  const assetName =
+    observation.assetName
+    || fieldDetails.provisional?.description
+    || 'Bien fisico no registrado';
+
+  return {
+    observationId:
+      observation.observationId,
+
+    observationCode:
+      observation.observationCode,
+
+    assetId:
+      observation.assetId,
+
+    assetCode:
+      observation.assetCode,
+
+    scannerCode:
+      observation.scannerCode,
+
+    provisionalCode:
+      observation.provisionalCode,
+
+    assetName,
+
+    observationStatus:
+      observation.observationStatus,
+
+    versionNumber:
+      observation.versionNumber,
+
+    observationActive:
+      observation.active == null
+        ? null
+        : Boolean(observation.active),
+
+    observedAt:
+      observation.observedAt,
+
+    displayCode:
+      observation.assetCode
+      || observation.provisionalCode
+      || row.entityCode,
+  };
+}
+
+function serializeAuditEvent(
+  database,
+  row,
+) {
+  const payload =
+    parseAuditPayload(
+      row.detailsJson,
+    );
+
+  const identity =
+    auditObservationIdentity(
+      database,
+      row,
+      payload,
+    );
+
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    entityType: row.entityType,
+    entityCode: row.entityCode,
+    entityId: row.entityId,
+    actionCode: row.actionCode,
+    operatorCode: row.operatorCode,
+    deviceCode: row.deviceCode,
+    createdAt: row.createdAt,
+    payload,
+    ...identity,
+  };
+}
+
+function getSessionAudit(
+  database,
+  sessionId,
+) {
+  const rows = database.prepare(`
+    SELECT
+      id,
+      inventory_session_id AS sessionId,
+      entity_type AS entityType,
+      entity_code AS entityCode,
+      entity_id AS entityId,
+      action_code AS actionCode,
+      operator_code AS operatorCode,
+      device_code AS deviceCode,
+      details_json AS detailsJson,
+      created_at AS createdAt
+    FROM audit_log
+    WHERE inventory_session_id = ?
+    ORDER BY created_at DESC, id DESC
+  `).all(sessionId);
+
+  return rows.map(
+    (row) =>
+      serializeAuditEvent(
+        database,
+        row,
+      ),
+  );
+}
+
+function searchTraceability(
+  database,
+  query,
+) {
+  const escaped =
+    String(query)
+      .replace(
+        /[\\%_]/g,
+        '\\$&',
+      );
+
+  const pattern =
+    `%${escaped}%`;
+
+  const rows = database.prepare(`
+    SELECT
+      o.id AS observationId,
+      o.inventory_session_id AS sessionId,
+      s.location_id AS locationId,
+      l.direction,
+      l.department,
+      l.section,
+      o.asset_id AS assetId,
+      a.asset_code AS assetCode,
+      a.scanner_code AS scannerCode,
+      a.name AS assetName,
+      o.provisional_code AS provisionalCode,
+      o.observation_code AS observationCode,
+      o.status_code AS observationStatus,
+      o.version_number AS versionNumber,
+      o.active,
+      o.observed_at AS observedAt,
+      d.details_json AS detailsJson
+    FROM observations o
+    JOIN inventory_sessions s
+      ON s.id = o.inventory_session_id
+    JOIN locations l
+      ON l.id = s.location_id
+    LEFT JOIN assets a
+      ON a.id = o.asset_id
+    LEFT JOIN observation_details d
+      ON d.observation_id = o.id
+    WHERE
+      a.asset_code LIKE ? ESCAPE '\\'
+      OR a.scanner_code LIKE ? ESCAPE '\\'
+      OR a.name LIKE ? ESCAPE '\\'
+      OR o.provisional_code LIKE ? ESCAPE '\\'
+      OR o.observation_code LIKE ? ESCAPE '\\'
+    ORDER BY
+      o.active DESC,
+      o.observed_at DESC,
+      o.id DESC
+    LIMIT 100
+  `).all(
+    pattern,
+    pattern,
+    pattern,
+    pattern,
+    pattern,
+  );
+
+  const matches = new Map();
+
+  for (const row of rows) {
+    const identity =
+      row.assetId
+        ? `asset:${row.assetId}`
+        : `provisional:${row.provisionalCode}`;
+
+    const key =
+      `${row.sessionId}:${identity}`;
+
+    const details =
+      parseDetails(
+        row.detailsJson,
+      );
+
+    const assetName =
+      row.assetName
+      || details.provisional?.description
+      || 'Bien fisico no registrado';
+
+    const displayCode =
+      row.assetCode
+      || row.provisionalCode
+      || row.observationCode;
+
+    if (!matches.has(key)) {
+      matches.set(
+        key,
+        {
+          sessionId: row.sessionId,
+          locationId: row.locationId,
+          direction: row.direction,
+          department: row.department,
+          section: row.section,
+          assetId: row.assetId,
+          assetCode: row.assetCode,
+          scannerCode: row.scannerCode,
+          provisionalCode:
+            row.provisionalCode,
+          displayCode,
+          assetName,
+          currentStatus:
+            row.observationStatus,
+          currentVersion:
+            row.versionNumber,
+          current:
+            Boolean(row.active),
+          observedAt:
+            row.observedAt,
+          versions: 1,
+        },
+      );
+
+      continue;
+    }
+
+    const existing =
+      matches.get(key);
+
+    existing.versions += 1;
+
+    existing.currentVersion =
+      Math.max(
+        Number(existing.currentVersion) || 1,
+        Number(row.versionNumber) || 1,
+      );
+
+    if (row.active) {
+      existing.current = true;
+      existing.currentStatus =
+        row.observationStatus;
+      existing.observedAt =
+        row.observedAt;
+    }
+  }
+
+  return [
+    ...matches.values(),
+  ];
+}
+
 function startOrResumeSession(database, locationId, identity = {}) {
   return database.transaction(() => {
     const openSessions = getOpenSessionSummaries(database, locationId);
@@ -1255,6 +1667,31 @@ export function createApiRouter(database, {
     });
   });
 
+  router.get('/audit/search', (request, response) => {
+    const query =
+      String(request.query.q ?? '')
+        .trim()
+        .slice(0, 120);
+
+    if (query.length < 2) {
+      return response.status(400).json({
+        error:
+          'Indique al menos dos caracteres para buscar trazabilidad.',
+      });
+    }
+
+    const matches =
+      searchTraceability(
+        database,
+        query,
+      );
+
+    return response.json({
+      query,
+      matches,
+    });
+  });
+
   router.post('/sessions', (request, response) => {
     const parsed = sessionSchema.safeParse(request.body);
     if (!parsed.success) return response.status(400).json({ error: 'Datos de sesión inválidos.' });
@@ -1546,6 +1983,52 @@ export function createApiRouter(database, {
       if (error.status === 409) return response.status(409).json({ error: error.message });
       throw error;
     }
+  });
+
+  router.get('/sessions/:id/audit', (request, response) => {
+    const sessionId =
+      sessionIdSchema.safeParse(
+        request.params.id,
+      );
+
+    if (!sessionId.success) {
+      return response.status(400).json({
+        error: 'Id de sesion invalido.',
+      });
+    }
+
+    const session =
+      getSessionSummary(
+        database,
+        sessionId.data,
+      );
+
+    if (!session) {
+      return response.status(404).json({
+        error: 'Sesion no encontrada.',
+      });
+    }
+
+    const audit =
+      getSessionAudit(
+        database,
+        sessionId.data,
+      );
+
+    return response.json({
+      session: {
+        id: session.id,
+        status: session.status,
+        locationId: session.locationId,
+        direction: session.direction,
+        department: session.department,
+        section: session.section,
+        startedAt: session.startedAt,
+        completedAt: session.completedAt,
+        cancelledAt: session.cancelledAt,
+      },
+      audit,
+    });
   });
 
   router.get('/sessions/:id/observations', (request, response) => {
