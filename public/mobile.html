@@ -100,79 +100,496 @@
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#edit"></use></svg>
               <span>Registrar incidencia</span>
             </div>
-            <label class="control-field">Estado
-              <select id="status" required>
-                <option value="otra_ubicacion">Otra ubicación</option>
-                <option value="no_ubicado">No ubicado</option>
-                <option value="desconocido">Desconocido</option>
-                <option value="dato_distinto">Dato distinto</option>
-              </select>
-            </label>
-            <details class="incidence-options" open>
-              <summary>Clasificar incidencia</summary>
-              <fieldset>
-                <legend>Estado observado</legend>
-                <label>Etiqueta <select id="mobile-label"><option value="correcta">Correcta</option><option value="deteriorada">Deteriorada</option><option value="ilegible">Ilegible</option><option value="sin_etiqueta">Sin etiqueta</option><option value="posible_duplicada">Posible duplicada</option></select></label>
-                <label>Conservación <select id="mobile-physical"><option value="bueno">Bueno</option><option value="regular">Regular</option><option value="malo">Malo</option><option value="incompleto">Incompleto</option></select></label>
-                <label>Funcionamiento <select id="mobile-functionality"><option value="operativo">Operativo</option><option value="operativo_con_falla">Operativo con falla</option><option value="no_operativo">No operativo</option><option value="no_verificable">No verificable</option></select></label>
-                <label><input id="mobile-disposal" type="checkbox"> Propuesta de baja</label>
-              </fieldset>
-              <fieldset>
-                <legend>Punto físico</legend>
-                <label>Tipo <select id="mobile-point"><option value="">Seleccione…</option><option value="puesto">Puesto / escritorio</option><option value="sala">Sala</option><option value="bodega">Bodega</option><option value="recepcion">Recepción</option><option value="pasillo">Pasillo</option><option value="bano">Baño</option><option value="patio">Patio</option><option value="mueble">Mueble / estante</option><option value="otro">Otro</option></select></label>
-                <label>Referencia <input id="mobile-point-reference" maxlength="60"></label>
-              </fieldset>
-              <fieldset>
-                <legend>Situación</legend>
-                <label><input type="checkbox" name="situation" value="otra_ubicacion"> Encontrado en otra ubicación</label>
-                <label><input type="checkbox" name="situation" value="en_reparacion"> En reparación</label>
-                <label><input type="checkbox" name="situation" value="prestamo_informado"> Préstamo informado</label>
-                <label><input type="checkbox" name="situation" value="traslado_no_regularizado"> Traslado no regularizado</label>
-                <label><input type="checkbox" name="situation" value="bien_tercero"> Bien de tercero / no municipal</label>
-                <label><input type="checkbox" name="situation" value="bien_no_registrado"> Bien no registrado</label>
-                <label><input type="checkbox" name="situation" value="requiere_revision"> Requiere revisión</label>
-              </fieldset>
-              <fieldset id="mobile-provisional-fields" hidden>
-                <legend>Bien adicional</legend>
-                <label>Tipo / descripción * <input id="mobile-provisional-description" maxlength="160"></label>
-                <label>Marca <input id="mobile-provisional-brand" maxlength="80"></label>
-                <label>Modelo <input id="mobile-provisional-model" maxlength="80"></label>
-                <label>Serie <input id="mobile-provisional-serial" maxlength="120"></label>
-                <label><input id="mobile-pending-identification" type="checkbox"> Pendiente de identificar</label>
-              </fieldset>
-              <fieldset id="mobile-discrepancy-fields" hidden>
-                <legend>Dato que no coincide</legend>
-                <label>Campo <select id="mobile-discrepancy-field"><option value="description">Descripción</option><option value="brand">Marca</option><option value="model">Modelo</option><option value="serialNumber">Serie</option><option value="assetType">Tipo de bien</option><option value="otherIdentifier">Otro identificador</option></select></label>
-                <label>Valor observado <input id="mobile-discrepancy-value" maxlength="250"></label>
-                <label><input id="mobile-discrepancy-evidence" type="checkbox"> Leer desde evidencia Serie/modelo</label>
-              </fieldset>
-              <fieldset id="mobile-extra-fields">
-                <legend>Detalle cuando corresponda</legend>
-                <label>Componente faltante <select id="mobile-incomplete-part"><option value="">No corresponde</option><option value="fuente_cargador">Fuente/cargador</option><option value="cable">Cable</option><option value="tapa">Tapa</option><option value="bandeja">Bandeja</option><option value="accesorio">Accesorio</option><option value="componente">Componente</option><option value="otro">Otro</option></select></label>
-                <label>Motivo de revisión <select id="mobile-review-reason"><option value="">No corresponde</option><option value="identificacion">Identificación</option><option value="propiedad">Propiedad/procedencia</option><option value="ubicacion">Ubicación</option><option value="descripcion">Descripción</option><option value="serie_modelo">Serie/modelo</option><option value="estado_fisico">Estado físico</option><option value="documentacion">Documentación</option><option value="otro">Otro</option></select></label>
-                <label>Destino/unidad/persona <input id="mobile-custody-destination" maxlength="120"></label>
-                <label>Referencia documental <input id="mobile-custody-reference" maxlength="100"></label>
-                <label>Base <select id="mobile-custody-basis"><option value="">No corresponde</option><option value="informado">Informado, no verificado</option><option value="verificado">Verificado</option></select></label>
-              </fieldset>
-            </details>
-            <fieldset class="evidence-fieldset">
-              <legend>Evidencia fotográfica</legend>
-              <p>Puede agregar varias fotos, una o más del mismo tipo.</p>
-              <div class="evidence-types">
-                <label><input type="radio" name="evidence-type" value="bien_completo"> Bien completo</label>
-                <label><input type="radio" name="evidence-type" value="etiqueta_patrimonial"> Etiqueta patrimonial</label>
-                <label><input type="radio" name="evidence-type" value="serie_modelo"> Serie / modelo</label>
-                <label><input type="radio" name="evidence-type" value="dano"> Daño</label>
-                <label><input type="radio" name="evidence-type" value="ubicacion"> Ubicación</label>
-              </div>
-              <button id="add-evidence" type="button" class="secondary">
-                <svg class="icon" aria-hidden="true"><use href="/icons.svg#camera"></use></svg>
-                <span>Agregar foto</span>
-              </button>
-              <input id="evidence-file" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" multiple hidden>
-              <div id="mobile-evidence-queue" class="evidence-queue"></div>
-              <p id="evidence-status" class="evidence-status" aria-live="polite"></p>
-            </fieldset>
+            <div class="system-field" hidden>
+              <label>Estado interno
+                <select id="status" required>
+                  <option value="otra_ubicacion">Otra ubicación</option>
+                  <option value="no_ubicado">No ubicado</option>
+                  <option value="desconocido">Desconocido</option>
+                  <option value="dato_distinto">Dato distinto</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="capture-flow">
+
+              <section id="mobile-section-identification"
+                class="capture-section"
+                data-section="identification">
+                <header class="capture-section__header">
+                  <span class="capture-step">1</span>
+                  <div>
+                    <strong>Identificación</strong>
+                    <details class="section-help" data-help-for="identification">
+                      <summary title="Indique c&#243;mo se identifica el bien. Si no tiene c&#243;digo, descr&#237;balo brevemente. Agregue marca, modelo o serie s&#243;lo si est&#225;n visibles. Marque pendiente de identificar s&#243;lo cuando corresponda.">?</summary>
+                      <div class="section-help__body">
+                        Indique c&#243;mo se identifica el bien. Si no tiene c&#243;digo, descr&#237;balo brevemente. Agregue marca, modelo o serie s&#243;lo si est&#225;n visibles. Marque pendiente de identificar s&#243;lo cuando corresponda.
+                      </div>
+                    </details>
+                    <small>Qué bien estoy observando</small>
+                  </div>
+                  <span class="capture-status" data-section-status>
+                    Por completar
+                  </span>
+                </header>
+
+                <label>Estado de la etiqueta *
+                  <select id="mobile-label">
+                    <option value="">Seleccione…</option>
+                    <option value="correcta">Correcta</option>
+                    <option value="deteriorada">Deteriorada</option>
+                    <option value="ilegible">Ilegible</option>
+                    <option value="sin_etiqueta">Sin etiqueta</option>
+                    <option value="posible_duplicada">Posible duplicada</option>
+                  </select>
+                </label>
+
+                <div id="mobile-provisional-fields"
+                  class="conditional-group"
+                  hidden>
+                  <p class="conditional-title">Bien adicional</p>
+
+                  <label>Descripción del bien *
+                    <input id="mobile-provisional-description"
+                      maxlength="160">
+                  </label>
+
+                  <details class="optional-details">
+                    <summary>Agregar marca, modelo o serie</summary>
+
+                    <div class="optional-details__body">
+                      <label>Marca
+                        <input id="mobile-provisional-brand" maxlength="80">
+                      </label>
+
+                      <label>Modelo
+                        <input id="mobile-provisional-model" maxlength="80">
+                      </label>
+
+                      <label>Serie
+                        <input id="mobile-provisional-serial" maxlength="120">
+                      </label>
+                    </div>
+                  </details>
+
+                  <label class="choice-row">
+                    <input id="mobile-pending-identification"
+                      type="checkbox">
+                    <span>Pendiente de identificar</span>
+                  </label>
+                </div>
+
+                <label id="mobile-discrepancy-toggle-row"
+                  class="choice-row">
+                  <input id="mobile-has-discrepancy"
+                    type="checkbox">
+                  <span>
+                    Los datos del bien no coinciden con el registro
+                  </span>
+                </label>
+
+                <div id="mobile-discrepancy-fields"
+                  class="conditional-group"
+                  hidden>
+                  <p class="conditional-title">
+                    Dato diferente al inventario maestro
+                  </p>
+
+                  <label>Campo
+                    <select id="mobile-discrepancy-field">
+                      <option value="description">Descripción</option>
+                      <option value="brand">Marca</option>
+                      <option value="model">Modelo</option>
+                      <option value="serialNumber">Serie</option>
+                      <option value="assetType">Tipo de bien</option>
+                      <option value="otherIdentifier">
+                        Otro identificador
+                      </option>
+                    </select>
+                  </label>
+
+                  <label>Valor observado
+                    <input id="mobile-discrepancy-value"
+                      maxlength="250">
+                  </label>
+
+                  <label class="choice-row">
+                    <input id="mobile-discrepancy-evidence"
+                      type="checkbox">
+                    <span>
+                      Completar después desde foto Serie/modelo
+                    </span>
+                  </label>
+                </div>
+              </section>
+
+
+              <section id="mobile-section-location"
+                class="capture-section"
+                data-section="location"
+                hidden>
+                <header class="capture-section__header">
+                  <span class="capture-step">2</span>
+                  <div>
+                    <strong>Dónde está</strong>
+                    <details class="section-help" data-help-for="location">
+                      <summary title="Registre el punto f&#237;sico exacto donde observ&#243; el bien. La referencia debe permitir que otra persona pueda encontrarlo sin depender de su memoria.">?</summary>
+                      <div class="section-help__body">
+                        Registre el punto f&#237;sico exacto donde observ&#243; el bien. La referencia debe permitir que otra persona pueda encontrarlo sin depender de su memoria.
+                      </div>
+                    </details>
+                    <small>Ubicación física exacta</small>
+                  </div>
+                  <span class="capture-status" data-section-status>
+                    Por completar
+                  </span>
+                </header>
+
+                <label>Punto físico *
+                  <select id="mobile-point">
+                    <option value="">Seleccione…</option>
+                    <option value="puesto">Puesto / escritorio</option>
+                    <option value="sala">Sala</option>
+                    <option value="bodega">Bodega</option>
+                    <option value="recepcion">Recepción</option>
+                    <option value="pasillo">Pasillo</option>
+                    <option value="bano">Baño</option>
+                    <option value="patio">Patio</option>
+                    <option value="mueble">Mueble / estante</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </label>
+
+                <label>Referencia
+                  <input id="mobile-point-reference"
+                    maxlength="60"
+                    placeholder="Ej.: lateral izquierdo, estante 2">
+                </label>
+              </section>
+
+
+              <section id="mobile-section-condition"
+                class="capture-section"
+                data-section="condition">
+                <header class="capture-section__header">
+                  <span class="capture-step">3</span>
+                  <div>
+                    <strong>Cómo está</strong>
+                    <details class="section-help" data-help-for="condition">
+                      <summary title="Indique la conservaci&#243;n y el funcionamiento seg&#250;n lo que realmente observa. Si no corresponde probarlo, seleccione No verificable. Use propuesta de baja s&#243;lo si existen antecedentes f&#237;sicos que la justifiquen.">?</summary>
+                      <div class="section-help__body">
+                        Indique la conservaci&#243;n y el funcionamiento seg&#250;n lo que realmente observa. Si no corresponde probarlo, seleccione No verificable. Use propuesta de baja s&#243;lo si existen antecedentes f&#237;sicos que la justifiquen.
+                      </div>
+                    </details>
+                    <small>Estado físico y funcionamiento</small>
+                  </div>
+                  <span class="capture-status" data-section-status>
+                    Por completar
+                  </span>
+                </header>
+
+                <label>Conservación *
+                  <select id="mobile-physical">
+                    <option value="">Seleccione…</option>
+                    <option value="bueno">Bueno</option>
+                    <option value="regular">Regular</option>
+                    <option value="malo">Malo</option>
+                    <option value="incompleto">Incompleto</option>
+                  </select>
+                </label>
+
+                <label>Funcionamiento *
+                  <select id="mobile-functionality">
+                    <option value="">Seleccione…</option>
+                    <option value="operativo">Operativo</option>
+                    <option value="operativo_con_falla">
+                      Operativo con falla
+                    </option>
+                    <option value="no_operativo">No operativo</option>
+                    <option value="no_verificable">No verificable</option>
+                  </select>
+                </label>
+
+                <label class="choice-row">
+                  <input id="mobile-disposal" type="checkbox">
+                  <span>Propuesta de baja</span>
+                </label>
+
+                <div id="mobile-incomplete-fields"
+                  class="conditional-group"
+                  hidden>
+                  <label>Componente faltante *
+                    <select id="mobile-incomplete-part">
+                      <option value="">Seleccione…</option>
+                      <option value="fuente_cargador">
+                        Fuente / cargador
+                      </option>
+                      <option value="cable">Cable</option>
+                      <option value="tapa">Tapa</option>
+                      <option value="bandeja">Bandeja</option>
+                      <option value="accesorio">Accesorio</option>
+                      <option value="componente">Componente</option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </label>
+
+                  <label id="mobile-incomplete-other-row" hidden>
+                    Describa el componente *
+                    <input id="mobile-incomplete-other"
+                      maxlength="80">
+                  </label>
+                </div>
+              </section>
+
+
+              <section id="mobile-section-situation"
+                class="capture-section"
+                data-section="situation">
+                <header class="capture-section__header">
+                  <span class="capture-step">4</span>
+                  <div>
+                    <strong>Qué situación existe</strong>
+                    <details class="section-help" data-help-for="situation">
+                      <summary title="Marque s&#243;lo situaciones observadas, informadas o verificadas. No marque por suposici&#243;n. Si ninguna opci&#243;n visible corresponde, deje la secci&#243;n como Sin adicional.">?</summary>
+                      <div class="section-help__body">
+                        Marque s&#243;lo situaciones observadas, informadas o verificadas. No marque por suposici&#243;n. Si ninguna opci&#243;n visible corresponde, deje la secci&#243;n como Sin adicional.
+                      </div>
+                    </details>
+                    <small>
+                      Marque sólo lo que realmente corresponda
+                    </small>
+                  </div>
+                  <span class="capture-status" data-section-status>
+                    Opcional
+                  </span>
+                </header>
+
+                <label class="choice-row" hidden>
+                  <input type="checkbox"
+                    name="situation"
+                    value="otra_ubicacion">
+                  <span>Encontrado en otra ubicación</span>
+                </label>
+
+                <label class="choice-row">
+                  <input type="checkbox"
+                    name="situation"
+                    value="en_reparacion">
+                  <span>En reparación</span>
+                </label>
+
+                <label class="choice-row">
+                  <input type="checkbox"
+                    name="situation"
+                    value="prestamo_informado">
+                  <span>Préstamo informado</span>
+                </label>
+
+                <label class="choice-row">
+                  <input type="checkbox"
+                    name="situation"
+                    value="traslado_no_regularizado">
+                  <span>Traslado no regularizado</span>
+                </label>
+
+                <label class="choice-row">
+                  <input type="checkbox"
+                    name="situation"
+                    value="bien_tercero">
+                  <span>Bien de tercero / no municipal</span>
+                </label>
+
+                <label class="choice-row" hidden>
+                  <input type="checkbox"
+                    name="situation"
+                    value="bien_no_registrado">
+                  <span>Bien no registrado</span>
+                </label>
+
+                <label class="choice-row">
+                  <input type="checkbox"
+                    name="situation"
+                    value="requiere_revision">
+                  <span>Requiere revisión posterior</span>
+                </label>
+
+                <div id="mobile-review-fields"
+                  class="conditional-group"
+                  hidden>
+                  <label>¿Qué debe revisarse? *
+                    <select id="mobile-review-reason">
+                      <option value="">Seleccione…</option>
+                      <option value="identificacion">
+                        Identificación
+                      </option>
+                      <option value="propiedad">
+                        Propiedad / procedencia
+                      </option>
+                      <option value="ubicacion">Ubicación</option>
+                      <option value="descripcion">Descripción</option>
+                      <option value="serie_modelo">
+                        Serie / modelo
+                      </option>
+                      <option value="estado_fisico">
+                        Estado físico
+                      </option>
+                      <option value="documentacion">
+                        Documentación
+                      </option>
+                      <option value="otro">Otro</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div id="mobile-custody-fields"
+                  class="conditional-group"
+                  hidden>
+                  <label>Destino, unidad o persona *
+                    <input id="mobile-custody-destination"
+                      maxlength="120">
+                  </label>
+
+                  <label>Referencia documental
+                    <input id="mobile-custody-reference"
+                      maxlength="100">
+                  </label>
+
+                  <label>Origen de la información *
+                    <select id="mobile-custody-basis">
+                      <option value="">Seleccione…</option>
+                      <option value="informado">
+                        Informado, no verificado
+                      </option>
+                      <option value="verificado">Verificado</option>
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+
+              <section id="mobile-section-evidence"
+                class="capture-section"
+                data-section="evidence">
+                <header class="capture-section__header">
+                  <span class="capture-step">5</span>
+                  <div>
+                    <strong>Evidencia</strong>
+                    <details class="section-help" data-help-for="evidence">
+                      <summary title="Tome las fotograf&#237;as que el sistema marque como obligatorias. Bien completo debe mostrar el objeto entero. Las dem&#225;s categor&#237;as se usan cuando corresponda documentar etiqueta, serie o modelo, da&#241;o o ubicaci&#243;n.">?</summary>
+                      <div class="section-help__body">
+                        Tome las fotograf&#237;as que el sistema marque como obligatorias. Bien completo debe mostrar el objeto entero. Las dem&#225;s categor&#237;as se usan cuando corresponda documentar etiqueta, serie o modelo, da&#241;o o ubicaci&#243;n.
+                      </div>
+                    </details>
+                    <small>
+                      Fotos necesarias para respaldar el hallazgo
+                    </small>
+                  </div>
+                  <span class="capture-status" data-section-status>
+                    Opcional
+                  </span>
+                </header>
+
+                <fieldset class="evidence-fieldset">
+                  <legend>Fotografía</legend>
+                  <p>
+                    Seleccione qué muestra la fotografía y luego
+                    tome la foto.
+                  </p>
+
+                  <div class="evidence-types">
+                    <label>
+                      <input type="radio"
+                        name="evidence-type"
+                        value="bien_completo">
+                      Bien completo
+                    </label>
+                    <label>
+                      <input type="radio"
+                        name="evidence-type"
+                        value="etiqueta_patrimonial">
+                      Etiqueta
+                    </label>
+                    <label>
+                      <input type="radio"
+                        name="evidence-type"
+                        value="serie_modelo">
+                      Serie / modelo
+                    </label>
+                    <label>
+                      <input type="radio"
+                        name="evidence-type"
+                        value="dano">
+                      Daño
+                    </label>
+                    <label>
+                      <input type="radio"
+                        name="evidence-type"
+                        value="ubicacion">
+                      Ubicación
+                    </label>
+                  </div>
+
+                  <button id="add-evidence"
+                    type="button"
+                    class="secondary">
+                    <svg class="icon" aria-hidden="true">
+                      <use href="/icons.svg#camera"></use>
+                    </svg>
+                    <span>Agregar foto</span>
+                  </button>
+
+                  <input id="evidence-file"
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    capture="environment"
+                    multiple
+                    hidden>
+
+                  <div id="mobile-evidence-queue"
+                    class="evidence-queue"></div>
+
+                  <p id="evidence-status"
+                    class="evidence-status"
+                    aria-live="polite"></p>
+                </fieldset>
+              </section>
+
+
+              <section id="mobile-section-confirm"
+                class="capture-section capture-confirm"
+                data-section="confirm">
+                <header class="capture-section__header">
+                  <span class="capture-step">6</span>
+                  <div>
+                    <strong>Confirmar</strong>
+                    <details class="section-help" data-help-for="confirm">
+                      <summary title="Revise los datos pendientes antes de guardar. El bot&#243;n se habilita s&#243;lo cuando se cumplen los m&#237;nimos exigidos. Antes de guardar, confirme que el registro representa lo observado.">?</summary>
+                      <div class="section-help__body">
+                        Revise los datos pendientes antes de guardar. El bot&#243;n se habilita s&#243;lo cuando se cumplen los m&#237;nimos exigidos. Antes de guardar, confirme que el registro representa lo observado.
+                      </div>
+                    </details>
+                    <small>
+                      El sistema comprueba los mínimos obligatorios
+                    </small>
+                  </div>
+                  <span class="capture-status" data-section-status>
+                    Por completar
+                  </span>
+                </header>
+
+                <div id="mobile-readiness"
+                  class="capture-readiness"
+                  aria-live="polite">
+                  <strong id="mobile-readiness-title">
+                    Revisando datos…
+                  </strong>
+                  <div id="mobile-requirements"
+                    class="requirement-list"></div>
+                </div>
+              </section>
+
+            </div>
+
             <div class="mobile-action-bar">
               <button type="submit">
                 <svg class="icon" aria-hidden="true"><use href="/icons.svg#check"></use></svg>

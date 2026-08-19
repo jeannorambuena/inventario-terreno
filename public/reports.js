@@ -2,6 +2,25 @@ const elements = {
   sessionSelect: document.querySelector('#session-select'),
   printReport: document.querySelector('#print-report'),
   overviewCutoff: document.querySelector('#overview-cutoff'),
+  dashboardLive: document.querySelector('#dashboard-live'),
+  dashboardLastSync: document.querySelector('#dashboard-last-sync'),
+  dashboardKpis: document.querySelector('#dashboard-kpis'),
+  dashboardDirections: document.querySelector('#dashboard-directions'),
+  dashboardSummary: document.querySelector('#dashboard-summary'),
+  explorerDirection: document.querySelector('#explorer-direction'),
+  explorerDepartment: document.querySelector('#explorer-department'),
+  explorerSection: document.querySelector('#explorer-section'),
+  explorerStatus: document.querySelector('#explorer-status'),
+  explorerEmpty: document.querySelector('#explorer-empty'),
+  explorerContent: document.querySelector('#explorer-content'),
+  explorerBreadcrumb: document.querySelector('#explorer-breadcrumb'),
+  explorerMetrics: document.querySelector('#explorer-metrics'),
+  explorerAssets: document.querySelector('#explorer-assets'),
+  explorerFindings: document.querySelector('#explorer-findings'),
+  explorerEvidence: document.querySelector('#explorer-evidence'),
+  explorerExpectedCount: document.querySelector('#explorer-expected-count'),
+  explorerFindingsCount: document.querySelector('#explorer-findings-count'),
+  explorerEvidenceCount: document.querySelector('#explorer-evidence-count'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -31,7 +50,17 @@ const elements = {
   closePhoto: document.querySelector('#close-photo'),
 };
 
-const state = { sessionId: null, report: null };
+const state = {
+  sessionId: null,
+  report: null,
+  overview: null,
+  dashboardTimer: null,
+  dashboardRefreshing: false,
+  explorerLocationId: null,
+  explorerSessionId: null,
+  explorerRefreshing: false,
+  explorerTab: 'expected',
+};
 
 async function api(path) {
   const response = await fetch(path, { headers: { Accept: 'application/json' } });
@@ -95,6 +124,1172 @@ function stateLabel(value) {
     closed: 'FINALIZADA',
     cancelled: 'CANCELADA',
   }[value] || String(value || '').toUpperCase();
+}
+
+
+const dashboardNumberFormat = new Intl.NumberFormat(
+  'es-CL',
+);
+
+function dashboardNumber(value) {
+  return dashboardNumberFormat.format(
+    number(value),
+  );
+}
+
+function dashboardPercent(part, total) {
+  const numerator = number(part);
+  const denominator = number(total);
+
+  if (denominator <= 0) return 0;
+
+  return Math.round(
+    (numerator / denominator) * 1000,
+  ) / 10;
+}
+
+function appendDashboardKpi(
+  container,
+  {
+    label,
+    value,
+    meta,
+    tone = 'neutral',
+  },
+) {
+  const card = document.createElement('article');
+  card.className =
+    `dashboard-kpi dashboard-kpi--${tone}`;
+
+  const heading = document.createElement('span');
+  heading.className = 'dashboard-kpi__label';
+  heading.textContent = label;
+
+  const strong = document.createElement('strong');
+  strong.className = 'dashboard-kpi__value';
+  strong.textContent = value;
+
+  const detail = document.createElement('small');
+  detail.className = 'dashboard-kpi__meta';
+  detail.textContent = meta;
+
+  card.append(
+    heading,
+    strong,
+    detail,
+  );
+
+  container.append(card);
+}
+
+function appendDashboardSummary(
+  container,
+  label,
+  value,
+  detail,
+  tone = 'neutral',
+) {
+  const item = document.createElement('article');
+  item.className =
+    `dashboard-summary__item dashboard-summary__item--${tone}`;
+
+  const copy = document.createElement('div');
+
+  const heading = document.createElement('span');
+  heading.textContent = label;
+
+  const small = document.createElement('small');
+  small.textContent = detail;
+
+  copy.append(
+    heading,
+    small,
+  );
+
+  const strong = document.createElement('strong');
+  strong.textContent = value;
+
+  item.append(
+    copy,
+    strong,
+  );
+
+  container.append(item);
+}
+
+function renderDashboardDirections(directions) {
+  elements.dashboardDirections.replaceChildren();
+
+  for (const direction of directions) {
+    const metrics = direction.metrics || {};
+    const progress = Math.max(
+      0,
+      Math.min(
+        100,
+        number(metrics.porcentajeRevision),
+      ),
+    );
+
+    const row = document.createElement('article');
+    row.className = 'dashboard-direction';
+
+    const top = document.createElement('div');
+    top.className = 'dashboard-direction__top';
+
+    const name = document.createElement('strong');
+    name.textContent =
+      direction.name || 'Sin direcci\u00f3n';
+
+    const percent = document.createElement('span');
+    percent.textContent = `${progress}%`;
+
+    top.append(
+      name,
+      percent,
+    );
+
+    const track = document.createElement('div');
+    track.className = 'dashboard-direction__track';
+
+    const fill = document.createElement('span');
+    fill.style.width = `${progress}%`;
+
+    track.append(fill);
+
+    const detail = document.createElement('small');
+
+    detail.textContent =
+      `${number(metrics.finalizadas)} de `
+      + `${number(metrics.sections)} secciones `
+      + `finalizadas`;
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className =
+      'dashboard-direction__open secondary';
+    button.textContent = 'Explorar';
+
+    button.addEventListener(
+      'click',
+      () => openExplorerDirection(
+        direction.name,
+      ),
+    );
+
+    row.append(
+      top,
+      track,
+      detail,
+      button,
+    );
+
+    elements.dashboardDirections.append(row);
+  }
+
+  if (directions.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-report';
+    empty.textContent =
+      'No existen direcciones para mostrar.';
+
+    elements.dashboardDirections.append(empty);
+  }
+}
+
+function renderDashboard(overview) {
+  if (!overview) return;
+
+  const metrics = overview.overall || {};
+
+  const expected =
+    number(metrics.bienesEsperados);
+
+  const reviewed =
+    number(metrics.bienesEsperadosRevisados);
+
+  const conforming =
+    number(metrics.bienesConformes);
+
+  const incidences =
+    number(metrics.incidencias);
+
+  const pending =
+    number(metrics.pendientes);
+
+  const findings =
+    number(metrics.noRegistrados);
+
+  const reviewPercent =
+    number(metrics.porcentajeRevision);
+
+  const conformityPercent =
+    dashboardPercent(
+      conforming,
+      reviewed,
+    );
+
+  const incidencePercent =
+    dashboardPercent(
+      incidences,
+      reviewed,
+    );
+
+  const pendingPercent =
+    dashboardPercent(
+      pending,
+      expected,
+    );
+
+  elements.dashboardKpis.replaceChildren();
+
+  const kpis = [
+    {
+      label: 'Bienes esperados',
+      value: dashboardNumber(expected),
+      meta: 'Seg\u00fan inventario maestro',
+      tone: 'neutral',
+    },
+    {
+      label: 'Revisados',
+      value: dashboardNumber(reviewed),
+      meta: `${reviewPercent}% del universo esperado`,
+      tone: 'info',
+    },
+    {
+      label: 'Conformes',
+      value: dashboardNumber(conforming),
+      meta: `${conformityPercent}% de los revisados`,
+      tone: 'success',
+    },
+    {
+      label: 'Con incidencia',
+      value: dashboardNumber(incidences),
+      meta: `${incidencePercent}% de los revisados`,
+      tone: 'warning',
+    },
+    {
+      label: 'Pendientes',
+      value: dashboardNumber(pending),
+      meta: `${pendingPercent}% por revisar`,
+      tone: 'neutral',
+    },
+    {
+      label: 'Hallazgos adicionales',
+      value: dashboardNumber(findings),
+      meta: 'No registrados en el maestro',
+      tone: 'finding',
+    },
+  ];
+
+  for (const kpi of kpis) {
+    appendDashboardKpi(
+      elements.dashboardKpis,
+      kpi,
+    );
+  }
+
+  renderDashboardDirections(
+    overview.directions || [],
+  );
+
+  const directions =
+    overview.directions || [];
+
+  const sectionCount =
+    directions.reduce(
+      (sum, direction) =>
+        sum + number(direction.metrics?.sections),
+      0,
+    );
+
+  const completedSections =
+    directions.reduce(
+      (sum, direction) =>
+        sum + number(direction.metrics?.finalizadas),
+      0,
+    );
+
+  const closedPercent =
+    dashboardPercent(
+      completedSections,
+      sectionCount,
+    );
+
+  elements.dashboardSummary.replaceChildren();
+
+  appendDashboardSummary(
+    elements.dashboardSummary,
+    'Cobertura',
+    `${reviewPercent}%`,
+    `${dashboardNumber(reviewed)} de `
+      + `${dashboardNumber(expected)} esperados`,
+    reviewPercent >= 100
+      ? 'success'
+      : 'info',
+  );
+
+  appendDashboardSummary(
+    elements.dashboardSummary,
+    'Conformidad',
+    `${conformityPercent}%`,
+    `${dashboardNumber(conforming)} bienes conformes`,
+    conformityPercent >= 90
+      ? 'success'
+      : 'warning',
+  );
+
+  appendDashboardSummary(
+    elements.dashboardSummary,
+    'Secciones finalizadas',
+    `${closedPercent}%`,
+    `${completedSections} de ${sectionCount}`,
+    closedPercent >= 100
+      ? 'success'
+      : 'info',
+  );
+
+  appendDashboardSummary(
+    elements.dashboardSummary,
+    'Incidencias vigentes',
+    dashboardNumber(incidences),
+    'Requieren seguimiento o conciliaci\u00f3n',
+    incidences > 0
+      ? 'warning'
+      : 'success',
+  );
+
+  appendDashboardSummary(
+    elements.dashboardSummary,
+    'Requieren revisi\u00f3n',
+    dashboardNumber(
+      metrics.pendientesRevision,
+    ),
+    'Pendientes de an\u00e1lisis posterior',
+    number(metrics.pendientesRevision) > 0
+      ? 'warning'
+      : 'success',
+  );
+
+  appendDashboardSummary(
+    elements.dashboardSummary,
+    'Propuestas de baja',
+    dashboardNumber(
+      metrics.propuestasBaja,
+    ),
+    'Propuestas, no bajas administrativas',
+    number(metrics.propuestasBaja) > 0
+      ? 'warning'
+      : 'neutral',
+  );
+
+  elements.dashboardLastSync.textContent =
+    `Actualizado: ${dateTime(overview.generatedAt)}`;
+
+  elements.dashboardLive.dataset.state = 'online';
+  elements.dashboardLive.querySelector(
+    'strong',
+  ).textContent = 'Sistema en l\u00ednea';
+}
+
+
+function allOverviewSections(overview) {
+  return (overview?.directions || []).flatMap(
+    (direction) =>
+      (direction.departments || []).flatMap(
+        (department) =>
+          (department.sections || []).map(
+            (section) => ({
+              ...section,
+              directionName: direction.name,
+              departmentName: department.name,
+            }),
+          ),
+      ),
+  );
+}
+
+function uniqueSorted(values) {
+  return [...new Set(
+    values.filter(Boolean),
+  )].sort(
+    (a, b) => a.localeCompare(
+      b,
+      'es',
+      { sensitivity: 'base' },
+    ),
+  );
+}
+
+function setExplorerOptions(
+  select,
+  values,
+  selectedValue = '',
+) {
+  select.replaceChildren();
+
+  const blank = document.createElement('option');
+  blank.value = '';
+  blank.textContent = 'Seleccione\u2026';
+  select.append(blank);
+
+  for (const value of values) {
+    const option = document.createElement('option');
+    option.value = String(value.value ?? value);
+    option.textContent =
+      value.label ?? String(value);
+
+    select.append(option);
+  }
+
+  if (
+    selectedValue
+    && [...select.options].some(
+      ({ value }) =>
+        value === String(selectedValue),
+    )
+  ) {
+    select.value = String(selectedValue);
+  }
+}
+
+function refreshExplorerFilters(overview) {
+  const sections = allOverviewSections(overview);
+
+  const currentDirection =
+    elements.explorerDirection.value;
+
+  const currentDepartment =
+    elements.explorerDepartment.value;
+
+  const currentLocation =
+    elements.explorerSection.value;
+
+  const directions = uniqueSorted(
+    sections.map(
+      ({ directionName }) => directionName,
+    ),
+  );
+
+  setExplorerOptions(
+    elements.explorerDirection,
+    directions,
+    currentDirection,
+  );
+
+  const selectedDirection =
+    elements.explorerDirection.value;
+
+  const departments = uniqueSorted(
+    sections
+      .filter(
+        ({ directionName }) =>
+          directionName === selectedDirection,
+      )
+      .map(
+        ({ departmentName }) => departmentName,
+      ),
+  );
+
+  setExplorerOptions(
+    elements.explorerDepartment,
+    departments,
+    currentDepartment,
+  );
+
+  elements.explorerDepartment.disabled =
+    !selectedDirection;
+
+  const selectedDepartment =
+    elements.explorerDepartment.value;
+
+  const sectionOptions = sections
+    .filter(
+      (section) =>
+        section.directionName === selectedDirection
+        && section.departmentName === selectedDepartment,
+    )
+    .map(
+      (section) => ({
+        value: section.locationId,
+        label: section.section || 'Seccion sin nombre',
+      }),
+    )
+    .sort(
+      (a, b) =>
+        a.label.localeCompare(
+          b.label,
+          'es',
+          { sensitivity: 'base' },
+        ),
+    );
+
+  setExplorerOptions(
+    elements.explorerSection,
+    sectionOptions,
+    currentLocation,
+  );
+
+  elements.explorerSection.disabled =
+    !selectedDepartment;
+}
+
+function selectedOverviewSection() {
+  const locationId =
+    number(elements.explorerSection.value);
+
+  if (!locationId) return null;
+
+  return allOverviewSections(
+    state.overview,
+  ).find(
+    (section) =>
+      number(section.locationId) === locationId,
+  ) || null;
+}
+
+function observationStateLabel(observation) {
+  if (!observation) return 'Pendiente';
+
+  return {
+    verificado: 'Conforme',
+    dato_distinto: 'Con incidencia',
+    otra_ubicacion: 'Otra ubicacion',
+    no_ubicado: 'No encontrado',
+    desconocido: 'Hallazgo adicional',
+  }[observation.status]
+    || observation.status
+    || 'Registrado';
+}
+
+function observationTone(observation) {
+  if (!observation) return 'pending';
+
+  if (observation.status === 'verificado') {
+    return 'success';
+  }
+
+  if (observation.status === 'no_ubicado') {
+    return 'danger';
+  }
+
+  return 'warning';
+}
+
+function renderExplorerMetrics(section) {
+  elements.explorerMetrics.replaceChildren();
+
+  const metrics = [
+    {
+      label: 'Esperados',
+      value: dashboardNumber(
+        section.bienesEsperados,
+      ),
+      meta: 'Segun maestro',
+      tone: 'neutral',
+    },
+    {
+      label: 'Revisados',
+      value: dashboardNumber(
+        section.bienesEsperadosRevisados,
+      ),
+      meta: `${number(section.porcentajeRevision)}%`,
+      tone: 'info',
+    },
+    {
+      label: 'Conformes',
+      value: dashboardNumber(
+        section.bienesConformes,
+      ),
+      meta: 'Coinciden con el maestro',
+      tone: 'success',
+    },
+    {
+      label: 'Con incidencia',
+      value: dashboardNumber(
+        section.incidencias,
+      ),
+      meta: 'Observaciones vigentes',
+      tone: 'warning',
+    },
+    {
+      label: 'Pendientes',
+      value: dashboardNumber(
+        section.pendientes,
+      ),
+      meta: 'Aun no revisados',
+      tone: 'neutral',
+    },
+    {
+      label: 'Hallazgos adicionales',
+      value: dashboardNumber(
+        section.noRegistrados,
+      ),
+      meta: 'Fuera del maestro',
+      tone: 'finding',
+    },
+  ];
+
+  for (const metric of metrics) {
+    appendDashboardKpi(
+      elements.explorerMetrics,
+      metric,
+    );
+  }
+}
+
+function createExplorerStateBadge(
+  label,
+  tone,
+) {
+  const badge = document.createElement('span');
+
+  badge.className =
+    `explorer-state explorer-state--${tone}`;
+
+  badge.textContent = label;
+
+  return badge;
+}
+
+function renderExplorerAssets(
+  assets,
+  observations,
+) {
+  elements.explorerAssets.replaceChildren();
+
+  elements.explorerExpectedCount.textContent =
+    String(assets.length);
+
+  const byAsset = new Map(
+    observations
+      .filter(({ assetId }) => assetId)
+      .map(
+        (observation) => [
+          number(observation.assetId),
+          observation,
+        ],
+      ),
+  );
+
+  const header = document.createElement('div');
+  header.className =
+    'explorer-row explorer-row--header';
+
+  for (const label of [
+    'Codigo',
+    'Bien',
+    'Estado',
+    'Condicion',
+  ]) {
+    const cell = document.createElement('span');
+    cell.textContent = label;
+    header.append(cell);
+  }
+
+  elements.explorerAssets.append(header);
+
+  for (const asset of assets) {
+    const observation =
+      byAsset.get(number(asset.id));
+
+    const row = document.createElement('article');
+    row.className = 'explorer-row';
+
+    const code = document.createElement('strong');
+    code.textContent =
+      asset.assetCode || 'Sin codigo';
+
+    const name = document.createElement('span');
+    name.textContent =
+      asset.name || 'Bien sin descripcion';
+
+    const status = createExplorerStateBadge(
+      observationStateLabel(observation),
+      observationTone(observation),
+    );
+
+    const condition = document.createElement('span');
+
+    condition.textContent =
+      observation?.details?.physicalCondition
+      || (
+        observation?.status === 'verificado'
+          ? 'Sin observacion'
+          : observation
+            ? 'Registrada'
+            : '\u2014'
+      );
+
+    row.append(
+      code,
+      name,
+      status,
+      condition,
+    );
+
+    elements.explorerAssets.append(row);
+  }
+
+  if (assets.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-report';
+    empty.textContent =
+      'La seccion no tiene bienes esperados en el maestro.';
+
+    elements.explorerAssets.append(empty);
+  }
+}
+
+function renderExplorerFindings(
+  observations,
+  report,
+  sessionId,
+) {
+  elements.explorerFindings.replaceChildren();
+
+  const findings = observations.filter(
+    ({ assetId }) => !assetId,
+  );
+
+  elements.explorerFindingsCount.textContent =
+    String(findings.length);
+
+  const incidenceById = new Map(
+    (report?.incidences || []).map(
+      (incidence) => [
+        number(incidence.id),
+        incidence,
+      ],
+    ),
+  );
+
+  for (const finding of findings) {
+    const incidence =
+      incidenceById.get(number(finding.id));
+
+    const card = document.createElement('article');
+    card.className = 'explorer-finding';
+
+    const body = document.createElement('div');
+
+    const eyebrow = document.createElement('span');
+    eyebrow.className = 'explorer-finding__code';
+    eyebrow.textContent =
+      finding.provisionalCode
+      || 'Hallazgo provisional';
+
+    const heading = document.createElement('strong');
+    heading.textContent =
+      finding.details?.provisional?.description
+      || 'Bien fisico no registrado';
+
+    const meta = document.createElement('small');
+
+    const physicalCondition =
+      finding.details?.physicalCondition
+      || 'Sin condicion registrada';
+
+    const functionality =
+      finding.details?.functionality
+      || 'Sin funcionamiento registrado';
+
+    meta.textContent =
+      `${physicalCondition} ? ${functionality}`;
+
+    body.append(
+      eyebrow,
+      heading,
+      meta,
+    );
+
+    const actions = document.createElement('div');
+    actions.className =
+      'explorer-finding__actions';
+
+    const badge = createExplorerStateBadge(
+      observationStateLabel(finding),
+      'warning',
+    );
+
+    actions.append(badge);
+
+    if (incidence) {
+      const button =
+        document.createElement('button');
+
+      button.type = 'button';
+      button.className = 'secondary';
+      button.textContent = 'Ver ficha';
+
+      button.addEventListener(
+        'click',
+        () => openIncidence(
+          incidence.id,
+          sessionId,
+        ),
+      );
+
+      actions.append(button);
+    }
+
+    card.append(
+      body,
+      actions,
+    );
+
+    elements.explorerFindings.append(card);
+  }
+
+  if (findings.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-report';
+    empty.textContent =
+      'No hay hallazgos adicionales vigentes en esta seccion.';
+
+    elements.explorerFindings.append(empty);
+  }
+}
+
+function openExplorerEvidence(evidence) {
+  elements.photoFull.src = evidence.url;
+  elements.photoFull.alt =
+    `Evidencia ampliada: ${evidence.typeLabel}`;
+
+  elements.photoType.textContent =
+    evidence.typeLabel;
+
+  elements.photoDialog.showModal();
+}
+
+function renderExplorerEvidence(
+  report,
+) {
+  elements.explorerEvidence.replaceChildren();
+
+  const items = (
+    report?.incidences || []
+  ).flatMap(
+    (incidence) =>
+      (incidence.evidence || []).map(
+        (evidence) => ({
+          ...evidence,
+          incidence,
+        }),
+      ),
+  );
+
+  elements.explorerEvidenceCount.textContent =
+    String(items.length);
+
+  for (const item of items) {
+    const figure = document.createElement('figure');
+    figure.className =
+      'explorer-evidence__item';
+
+    const image = document.createElement('img');
+
+    image.src = item.url;
+    image.alt =
+      `Evidencia de ${item.incidence.displayCode}`;
+    image.loading = 'lazy';
+
+    const caption = document.createElement('figcaption');
+
+    const code = document.createElement('strong');
+    code.textContent =
+      item.incidence.displayCode;
+
+    const name = document.createElement('span');
+    name.textContent =
+      item.incidence.assetName;
+
+    const type = document.createElement('small');
+    type.textContent =
+      item.available === false
+        ? `${item.typeLabel} ? NO DISPONIBLE`
+        : item.typeLabel;
+
+    caption.append(
+      code,
+      name,
+      type,
+    );
+
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary';
+    button.textContent = 'Ampliar';
+    button.disabled =
+      item.available === false;
+
+    button.addEventListener(
+      'click',
+      () => openExplorerEvidence(item),
+    );
+
+    figure.append(
+      image,
+      caption,
+      button,
+    );
+
+    elements.explorerEvidence.append(figure);
+  }
+
+  if (items.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-report';
+    empty.textContent =
+      'No hay fotografias vigentes para mostrar.';
+
+    elements.explorerEvidence.append(empty);
+  }
+}
+
+function setExplorerTab(tab) {
+  state.explorerTab = tab;
+
+  document.querySelectorAll(
+    '[data-explorer-tab]',
+  ).forEach(
+    (button) => {
+      const active =
+        button.dataset.explorerTab === tab;
+
+      button.setAttribute(
+        'aria-pressed',
+        String(active),
+      );
+    },
+  );
+
+  document.querySelectorAll(
+    '[data-explorer-panel]',
+  ).forEach(
+    (panel) => {
+      panel.hidden =
+        panel.dataset.explorerPanel !== tab;
+    },
+  );
+}
+
+async function refreshExplorerSection({
+  silent = false,
+} = {}) {
+  if (
+    state.explorerRefreshing
+    || !state.explorerLocationId
+  ) return;
+
+  const section =
+    allOverviewSections(
+      state.overview,
+    ).find(
+      ({ locationId }) =>
+        number(locationId)
+        === number(state.explorerLocationId),
+    );
+
+  if (!section) return;
+
+  state.explorerRefreshing = true;
+
+  if (!silent) {
+    elements.explorerStatus.textContent =
+      'Actualizando seccion\u2026';
+  }
+
+  try {
+    const assetsPromise = api(
+      `/api/assets?locationId=${section.locationId}`,
+    );
+
+    let observations = [];
+    let report = null;
+
+    if (section.sessionId) {
+      const [
+        assetsResult,
+        observationsResult,
+        reportResult,
+      ] = await Promise.all([
+        assetsPromise,
+        api(
+          `/api/sessions/${section.sessionId}/observations`,
+        ),
+        api(
+          `/api/sessions/${section.sessionId}/report`,
+        ),
+      ]);
+
+      observations =
+        observationsResult.observations || [];
+
+      report =
+        reportResult.report || null;
+
+      renderExplorerAssets(
+        assetsResult.assets || [],
+        observations,
+      );
+
+    } else {
+      const assetsResult =
+        await assetsPromise;
+
+      renderExplorerAssets(
+        assetsResult.assets || [],
+        [],
+      );
+    }
+
+    state.explorerSessionId =
+      section.sessionId || null;
+
+    renderExplorerMetrics(section);
+
+    renderExplorerFindings(
+      observations,
+      report,
+      section.sessionId,
+    );
+
+    renderExplorerEvidence(report);
+
+    elements.explorerBreadcrumb.textContent =
+      `${section.directionName} / `
+      + `${section.departmentName} / `
+      + `${section.section}`;
+
+    elements.explorerEmpty.hidden = true;
+    elements.explorerContent.hidden = false;
+
+    elements.explorerStatus.textContent =
+      section.sessionId
+        ? (
+          section.state === 'finalizada'
+            ? 'Seccion finalizada'
+            : 'Levantamiento en proceso'
+        )
+        : 'Seccion no iniciada';
+
+  } catch (error) {
+    elements.explorerStatus.textContent =
+      'No fue posible actualizar';
+
+    if (!silent) {
+      setMessage(
+        error.message,
+        true,
+      );
+    }
+
+  } finally {
+    state.explorerRefreshing = false;
+  }
+}
+
+async function selectExplorerSection() {
+  const section =
+    selectedOverviewSection();
+
+  if (!section) {
+    state.explorerLocationId = null;
+    state.explorerSessionId = null;
+
+    elements.explorerContent.hidden = true;
+    elements.explorerEmpty.hidden = false;
+    elements.explorerStatus.textContent =
+      'Seleccione una seccion';
+
+    return;
+  }
+
+  state.explorerLocationId =
+    number(section.locationId);
+
+  await refreshExplorerSection();
+}
+
+function openExplorerDirection(directionName) {
+  refreshExplorerFilters(
+    state.overview,
+  );
+
+  elements.explorerDirection.value =
+    directionName;
+
+  elements.explorerDirection.dispatchEvent(
+    new Event('change'),
+  );
+
+  document.querySelector(
+    '#dashboard-explorer',
+  )?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  });
+}
+
+async function refreshDashboardOverview() {
+  if (state.dashboardRefreshing) return;
+
+  state.dashboardRefreshing = true;
+
+  try {
+    const { overview } = await api(
+      '/api/reports/overview',
+    );
+
+    state.overview = overview;
+
+    renderDashboard(overview);
+    renderOverview(overview);
+    refreshExplorerFilters(overview);
+
+    if (state.explorerLocationId) {
+      await refreshExplorerSection({
+        silent: true,
+      });
+    }
+
+    elements.dashboardLive.dataset.state =
+      'online';
+
+  } catch {
+    elements.dashboardLive.dataset.state =
+      'warning';
+
+    elements.dashboardLive.querySelector(
+      'strong',
+    ).textContent =
+      'Sin actualizaci\u00f3n';
+
+    elements.dashboardLastSync.textContent =
+      'Se reintentar\u00e1 autom\u00e1ticamente';
+
+  } finally {
+    state.dashboardRefreshing = false;
+  }
+}
+
+function startDashboardRefresh() {
+  if (state.dashboardTimer) return;
+
+  state.dashboardTimer = window.setInterval(
+    refreshDashboardOverview,
+    5000,
+  );
+}
+
+function stopDashboardRefresh() {
+  if (!state.dashboardTimer) return;
+
+  window.clearInterval(
+    state.dashboardTimer,
+  );
+
+  state.dashboardTimer = null;
 }
 
 function renderOverview(overview) {
@@ -250,9 +1445,14 @@ function tagList(title, values) {
   return section;
 }
 
-async function openIncidence(incidenceId) {
+async function openIncidence(
+  incidenceId,
+  requestedSessionId = state.sessionId,
+) {
   try {
-    const { incidence } = await api(`/api/sessions/${state.sessionId}/incidences/${incidenceId}`);
+    const { incidence } = await api(
+      `/api/sessions/${requestedSessionId}/incidences/${incidenceId}`,
+    );
     elements.incidenceKind.textContent = incidence.recordKind;
     elements.incidenceDetail.replaceChildren();
     const identity = document.createElement('dl');
@@ -465,6 +1665,104 @@ elements.sessionSelect.addEventListener('change', async () => {
   }
 });
 
+
+elements.explorerDirection.addEventListener(
+  'change',
+  () => {
+    const sections =
+      allOverviewSections(state.overview);
+
+    const departments = uniqueSorted(
+      sections
+        .filter(
+          ({ directionName }) =>
+            directionName
+            === elements.explorerDirection.value,
+        )
+        .map(
+          ({ departmentName }) =>
+            departmentName,
+        ),
+    );
+
+    setExplorerOptions(
+      elements.explorerDepartment,
+      departments,
+    );
+
+    elements.explorerDepartment.disabled =
+      !elements.explorerDirection.value;
+
+    setExplorerOptions(
+      elements.explorerSection,
+      [],
+    );
+
+    elements.explorerSection.disabled = true;
+
+    state.explorerLocationId = null;
+    state.explorerSessionId = null;
+
+    elements.explorerContent.hidden = true;
+    elements.explorerEmpty.hidden = false;
+  },
+);
+
+elements.explorerDepartment.addEventListener(
+  'change',
+  () => {
+    const sections =
+      allOverviewSections(state.overview)
+        .filter(
+          (section) =>
+            section.directionName
+              === elements.explorerDirection.value
+            && section.departmentName
+              === elements.explorerDepartment.value,
+        )
+        .map(
+          (section) => ({
+            value: section.locationId,
+            label:
+              section.section
+              || 'Seccion sin nombre',
+          }),
+        );
+
+    setExplorerOptions(
+      elements.explorerSection,
+      sections,
+    );
+
+    elements.explorerSection.disabled =
+      !elements.explorerDepartment.value;
+
+    state.explorerLocationId = null;
+    state.explorerSessionId = null;
+
+    elements.explorerContent.hidden = true;
+    elements.explorerEmpty.hidden = false;
+  },
+);
+
+elements.explorerSection.addEventListener(
+  'change',
+  selectExplorerSection,
+);
+
+document.querySelectorAll(
+  '[data-explorer-tab]',
+).forEach(
+  (button) => {
+    button.addEventListener(
+      'click',
+      () => setExplorerTab(
+        button.dataset.explorerTab,
+      ),
+    );
+  },
+);
+
 elements.filters.addEventListener('change', applyFilters);
 elements.printReport.addEventListener('click', () => window.print());
 elements.closeIncidence.addEventListener('click', () => elements.incidenceDialog.close());
@@ -479,7 +1777,12 @@ async function initialize() {
       api('/api/reports/overview'),
       api('/api/reports/sessions'),
     ]);
+    state.overview = overview;
+    renderDashboard(overview);
     renderOverview(overview);
+    refreshExplorerFilters(overview);
+    startDashboardRefresh();
+
     for (const session of sessions) {
       const option = document.createElement('option');
       option.value = String(session.id);
@@ -495,5 +1798,10 @@ async function initialize() {
     setMessage(error.message, true);
   }
 }
+
+window.addEventListener(
+  'pagehide',
+  stopDashboardRefresh,
+);
 
 initialize();

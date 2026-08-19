@@ -37,6 +37,236 @@
           <button id="print-report" type="button" disabled>Imprimir / guardar PDF</button>
         </section>
 
+
+        <section id="dashboard-control-v2"
+          class="dashboard-v2 no-print"
+          aria-labelledby="dashboard-title">
+
+          <div class="dashboard-v2__header">
+            <div>
+              <p class="section-kicker">
+                CONTROL EJECUTIVO
+              </p>
+
+              <h2 id="dashboard-title">
+                Dashboard de Inventario F&iacute;sico
+              </h2>
+
+              <p class="dashboard-v2__intro">
+                Avance consolidado del levantamiento en terreno.
+                Los resultados corresponden al estado vigente
+                registrado en el sistema.
+              </p>
+            </div>
+
+            <div id="dashboard-live"
+              class="dashboard-live"
+              data-state="online">
+
+              <span class="dashboard-live__dot"
+                aria-hidden="true"></span>
+
+              <div>
+                <strong>Sistema en l&iacute;nea</strong>
+                <time id="dashboard-last-sync">
+                  Esperando datos...
+                </time>
+              </div>
+            </div>
+          </div>
+
+          <div id="dashboard-kpis"
+            class="dashboard-kpis"
+            aria-label="Indicadores principales">
+          </div>
+
+          <div class="dashboard-v2__grid">
+
+            <article class="dashboard-panel">
+              <header class="dashboard-panel__header">
+                <div>
+                  <p class="section-kicker">
+                    COBERTURA
+                  </p>
+                  <h3>Avance por direcci&oacute;n</h3>
+                </div>
+
+                <span>
+                  Direcci&oacute;n &rarr; Departamento
+                  &rarr; Secci&oacute;n
+                </span>
+              </header>
+
+              <div id="dashboard-directions"
+                class="dashboard-directions">
+              </div>
+            </article>
+
+            <article class="dashboard-panel">
+              <header class="dashboard-panel__header">
+                <div>
+                  <p class="section-kicker">
+                    ESTADO OPERACIONAL
+                  </p>
+                  <h3>Lectura ejecutiva</h3>
+                </div>
+              </header>
+
+              <div id="dashboard-summary"
+                class="dashboard-summary">
+              </div>
+            </article>
+
+          </div>
+        </section>
+
+
+        <section id="dashboard-explorer"
+          class="dashboard-explorer no-print"
+          aria-labelledby="explorer-title">
+
+          <div class="dashboard-explorer__header">
+            <div>
+              <p class="section-kicker">EXPLORADOR DEL INVENTARIO</p>
+              <h2 id="explorer-title">
+                Direcci&oacute;n &rarr; Departamento &rarr; Secci&oacute;n
+              </h2>
+              <p>
+                Consulte el avance y la realidad f&iacute;sica registrada
+                en cada dependencia.
+              </p>
+            </div>
+
+            <span id="explorer-status"
+              class="explorer-status">
+              Seleccione una secci&oacute;n
+            </span>
+          </div>
+
+          <div class="explorer-filters">
+            <label>
+              Direcci&oacute;n
+              <select id="explorer-direction">
+                <option value="">Seleccione&hellip;</option>
+              </select>
+            </label>
+
+            <label>
+              Departamento
+              <select id="explorer-department" disabled>
+                <option value="">Seleccione&hellip;</option>
+              </select>
+            </label>
+
+            <label>
+              Secci&oacute;n / Oficina
+              <select id="explorer-section" disabled>
+                <option value="">Seleccione&hellip;</option>
+              </select>
+            </label>
+          </div>
+
+          <div id="explorer-empty"
+            class="explorer-empty">
+            Seleccione una direcci&oacute;n, departamento y secci&oacute;n
+            para revisar su estado.
+          </div>
+
+          <div id="explorer-content" hidden>
+
+            <div id="explorer-breadcrumb"
+              class="explorer-breadcrumb"></div>
+
+            <div id="explorer-metrics"
+              class="dashboard-kpis dashboard-kpis--section">
+            </div>
+
+            <nav class="explorer-tabs"
+              aria-label="Contenido de la secci&oacute;n">
+              <button type="button"
+                data-explorer-tab="expected"
+                aria-pressed="true">
+                Bienes esperados
+              </button>
+
+              <button type="button"
+                data-explorer-tab="findings"
+                aria-pressed="false">
+                Hallazgos adicionales
+              </button>
+
+              <button type="button"
+                data-explorer-tab="evidence"
+                aria-pressed="false">
+                Evidencias
+              </button>
+            </nav>
+
+            <section id="explorer-panel-expected"
+              class="explorer-panel"
+              data-explorer-panel="expected">
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Bienes esperados seg&uacute;n maestro</h3>
+                  <p>
+                    Bienes que el inventario maestro asigna a esta
+                    dependencia.
+                  </p>
+                </div>
+                <span id="explorer-expected-count"
+                  class="count-badge">0</span>
+              </div>
+
+              <div id="explorer-assets"
+                class="explorer-table"></div>
+            </section>
+
+            <section id="explorer-panel-findings"
+              class="explorer-panel"
+              data-explorer-panel="findings"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Hallazgos f&iacute;sicos adicionales</h3>
+                  <p>
+                    Objetos encontrados que no corresponden a un bien
+                    esperado del maestro en esta secci&oacute;n.
+                  </p>
+                </div>
+                <span id="explorer-findings-count"
+                  class="count-badge">0</span>
+              </div>
+
+              <div id="explorer-findings"
+                class="explorer-findings"></div>
+            </section>
+
+            <section id="explorer-panel-evidence"
+              class="explorer-panel"
+              data-explorer-panel="evidence"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Evidencia fotogr&aacute;fica</h3>
+                  <p>
+                    Fotograf&iacute;as vigentes asociadas a los registros
+                    de terreno.
+                  </p>
+                </div>
+                <span id="explorer-evidence-count"
+                  class="count-badge">0</span>
+              </div>
+
+              <div id="explorer-evidence"
+                class="explorer-evidence"></div>
+            </section>
+
+          </div>
+        </section>
+
         <section class="report-section" aria-labelledby="overview-title">
           <div class="report-heading">
             <div>

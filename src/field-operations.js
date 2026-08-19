@@ -64,15 +64,21 @@ export function normalizeFieldDetails(input = {}, legacy = {}) {
   const details = {
     label: fieldCatalog.label.includes(source.label)
       ? source.label
-      : oldIdentificationMap[legacyIdentification.find((value) => oldIdentificationMap[value])] || 'correcta',
+      : Object.hasOwn(source, 'label')
+        ? ''
+        : oldIdentificationMap[legacyIdentification.find((value) => oldIdentificationMap[value])] || 'correcta',
     physicalCondition: fieldCatalog.physicalCondition.includes(source.physicalCondition)
       ? source.physicalCondition
-      : legacyPhysical.includes('incompleto') ? 'incompleto'
-        : legacyPhysical.includes('malo') ? 'malo'
-          : legacyPhysical.includes('regular') ? 'regular' : 'bueno',
+      : Object.hasOwn(source, 'physicalCondition')
+        ? ''
+        : legacyPhysical.includes('incompleto') ? 'incompleto'
+          : legacyPhysical.includes('malo') ? 'malo'
+            : legacyPhysical.includes('regular') ? 'regular' : 'bueno',
     functionality: fieldCatalog.functionality.includes(source.functionality)
       ? source.functionality
-      : legacyPhysical.includes('no_operativo') ? 'no_operativo' : 'operativo',
+      : Object.hasOwn(source, 'functionality')
+        ? ''
+        : legacyPhysical.includes('no_operativo') ? 'no_operativo' : 'operativo',
     proposedDisposal: Boolean(source.proposedDisposal || legacyPhysical.includes('propuesta_baja')),
     situations: uniqueAllowed(source.situations?.length ? source.situations : legacySituations, fieldCatalog.situations),
     physicalPoint: {
