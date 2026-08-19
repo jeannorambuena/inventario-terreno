@@ -39,6 +39,10 @@ const elements = {
   explorerPhysicalCount: document.querySelector('#explorer-physical-count'),
   explorerSummarySheet: document.querySelector('#explorer-summary-sheet'),
   printSectionSummary: document.querySelector('#print-section-summary'),
+  dashboardUnitStatus: document.querySelector('#dashboard-unit-status'),
+  dashboardPriorityList: document.querySelector('#dashboard-priority-list'),
+  exportSectionCsv: document.querySelector('#export-section-csv'),
+  printPhysicalView: document.querySelector('#print-physical-view'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -78,6 +82,11 @@ const state = {
   explorerSessionId: null,
   explorerRefreshing: false,
   explorerTab: 'expected',
+  explorerAssets: [],
+  explorerObservations: [],
+  explorerReport: null,
+  explorerSection: null,
+  explorerQuery: '',
 };
 
 async function api(path) {
@@ -314,6 +323,403 @@ function renderDashboardDirections(directions) {
   }
 }
 
+
+function sectionOperationalPriority(section) {
+  const critical =
+    number(section.noRegistrados)
+    + number(section.propuestasBaja)
+    + number(section.pendientesRevision);
+
+  const attention =
+    number(section.incidencias)
+    + number(section.diferenciasUbicacion);
+
+  if (critical > 0) {
+    return {
+      code: 'alta',
+      label: 'ALTA',
+      rank: 3,
+    };
+  }
+
+  if (attention > 0) {
+    return {
+      code: 'media',
+      label: 'MEDIA',
+      rank: 2,
+    };
+  }
+
+  if (
+    section.state === 'en_proceso'
+    && number(section.pendientes) > 0
+  ) {
+    return {
+      code: 'seguimiento',
+      label: 'SEGUIMIENTO',
+      rank: 1,
+    };
+  }
+
+  return {
+    code: 'normal',
+    label: 'NORMAL',
+    rank: 0,
+  };
+}
+
+function appendUnitStatus(
+  label,
+  value,
+  detail,
+  tone = 'neutral',
+) {
+  const card = document.createElement('article');
+
+  card.className =
+    `dashboard-unit-card `
+    + `dashboard-unit-card--${tone}`;
+
+  const span = document.createElement('span');
+  span.textContent = label;
+
+  const strong = document.createElement('strong');
+  strong.textContent =
+    dashboardNumber(value);
+
+  const small = document.createElement('small');
+  small.textContent = detail;
+
+  card.append(
+    span,
+    strong,
+    small,
+  );
+
+  elements.dashboardUnitStatus.append(card);
+}
+
+async function openExplorerLocation(
+  locationId,
+) {
+  const sections =
+    allOverviewSections(state.overview);
+
+  const section = sections.find(
+    (item) =>
+      number(item.locationId)
+      === number(locationId),
+  );
+
+  if (!section) return;
+
+  refreshExplorerFilters(
+    state.overview,
+  );
+
+  elements.explorerDirection.value =
+    section.directionName;
+
+  const departments = uniqueSorted(
+    sections
+      .filter(
+        ({ directionName }) =>
+          directionName
+          === section.directionName,
+      )
+      .map(
+        ({ departmentName }) =>
+          departmentName,
+      ),
+  );
+
+  setExplorerOptions(
+    elements.explorerDepartment,
+    departments,
+    section.departmentName,
+  );
+
+  elements.explorerDepartment.disabled =
+    false;
+
+  const sectionOptions = sections
+    .filter(
+      (item) =>
+        item.directionName
+          === section.directionName
+        && item.departmentName
+          === section.departmentName,
+    )
+    .map(
+      (item) => ({
+        value: item.locationId,
+        label:
+          item.section
+          || 'Seccion sin nombre',
+      }),
+    );
+
+  setExplorerOptions(
+    elements.explorerSection,
+    sectionOptions,
+    section.locationId,
+  );
+
+  elements.explorerSection.disabled =
+    false;
+
+  state.explorerLocationId =
+    number(section.locationId);
+
+  await refreshExplorerSection();
+
+  document.querySelector(
+    '#dashboard-explorer',
+  )?.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  });
+}
+
+function renderDashboardPriorities(overview) {
+  elements.dashboardUnitStatus.replaceChildren();
+  elements.dashboardPriorityList.replaceChildren();
+
+  const overall =
+    overview?.overall || {};
+
+  appendUnitStatus(
+    'Secciones totales',
+    overall.sections,
+    'Dependencias con bienes maestros',
+  );
+
+  appendUnitStatus(
+    'Sin iniciar',
+    overall.sinIniciar,
+    'Aun sin levantamiento',
+    'neutral',
+  );
+
+  appendUnitStatus(
+    'En proceso',
+    overall.enProceso,
+    'Levantamiento activo',
+    'info',
+  );
+
+  appendUnitStatus(
+    'Finalizadas',
+    overall.finalizadas,
+    'Levantamiento cerrado',
+    'success',
+  );
+
+  appendUnitStatus(
+    'Incidencias',
+    overall.incidencias,
+    'Registros vigentes',
+    number(overall.incidencias) > 0
+      ? 'warning'
+      : 'success',
+  );
+
+  appendUnitStatus(
+    'Hallazgos adicionales',
+    overall.noRegistrados,
+    'No pertenecen al maestro esperado',
+    number(overall.noRegistrados) > 0
+      ? 'finding'
+      : 'success',
+  );
+
+  const candidates =
+    allOverviewSections(overview)
+      .filter(
+        (section) =>
+          section.state !== 'sin_iniciar'
+          || number(section.incidencias) > 0
+          || number(section.noRegistrados) > 0,
+      )
+      .map(
+        (section) => ({
+          ...section,
+          operationalPriority:
+            sectionOperationalPriority(section),
+        }),
+      )
+      .sort(
+        (a, b) =>
+          b.operationalPriority.rank
+            - a.operationalPriority.rank
+          || number(b.incidencias)
+            - number(a.incidencias)
+          || number(b.noRegistrados)
+            - number(a.noRegistrados)
+          || number(b.pendientes)
+            - number(a.pendientes),
+      )
+      .slice(0, 12);
+
+  for (const section of candidates) {
+    const row = document.createElement('article');
+
+    row.className =
+      'dashboard-priority-row';
+
+    const priority = document.createElement('span');
+
+    priority.className =
+      `dashboard-priority-badge `
+      + `dashboard-priority-badge--`
+      + section.operationalPriority.code;
+
+    priority.textContent =
+      section.operationalPriority.label;
+
+    const location = document.createElement('div');
+    location.className =
+      'dashboard-priority-row__location';
+
+    const heading = document.createElement('strong');
+
+    heading.textContent =
+      section.section || 'Seccion sin nombre';
+
+    const hierarchy = document.createElement('span');
+
+    hierarchy.textContent =
+      `${section.directionName} / `
+      + `${section.departmentName}`;
+
+    location.append(
+      heading,
+      hierarchy,
+    );
+
+    const progress = document.createElement('div');
+    progress.className =
+      'dashboard-priority-row__metric';
+
+    const progressStrong =
+      document.createElement('strong');
+
+    progressStrong.textContent =
+      `${number(section.porcentajeRevision)}%`;
+
+    const progressSmall =
+      document.createElement('small');
+
+    progressSmall.textContent =
+      'avance';
+
+    progress.append(
+      progressStrong,
+      progressSmall,
+    );
+
+    const incidences = document.createElement('div');
+    incidences.className =
+      'dashboard-priority-row__metric';
+
+    const incidenceStrong =
+      document.createElement('strong');
+
+    incidenceStrong.textContent =
+      dashboardNumber(section.incidencias);
+
+    const incidenceSmall =
+      document.createElement('small');
+
+    incidenceSmall.textContent =
+      'incidencias';
+
+    incidences.append(
+      incidenceStrong,
+      incidenceSmall,
+    );
+
+    const findings = document.createElement('div');
+    findings.className =
+      'dashboard-priority-row__metric';
+
+    const findingStrong =
+      document.createElement('strong');
+
+    findingStrong.textContent =
+      dashboardNumber(section.noRegistrados);
+
+    const findingSmall =
+      document.createElement('small');
+
+    findingSmall.textContent =
+      'hallazgos';
+
+    findings.append(
+      findingStrong,
+      findingSmall,
+    );
+
+    const pending = document.createElement('div');
+    pending.className =
+      'dashboard-priority-row__metric';
+
+    const pendingStrong =
+      document.createElement('strong');
+
+    pendingStrong.textContent =
+      dashboardNumber(section.pendientes);
+
+    const pendingSmall =
+      document.createElement('small');
+
+    pendingSmall.textContent =
+      'pendientes';
+
+    pending.append(
+      pendingStrong,
+      pendingSmall,
+    );
+
+    const button = document.createElement('button');
+
+    button.type = 'button';
+    button.className = 'secondary';
+    button.textContent = 'Abrir';
+
+    button.addEventListener(
+      'click',
+      () => openExplorerLocation(
+        section.locationId,
+      ),
+    );
+
+    row.append(
+      priority,
+      location,
+      progress,
+      incidences,
+      findings,
+      pending,
+      button,
+    );
+
+    elements.dashboardPriorityList.append(row);
+  }
+
+  if (candidates.length === 0) {
+    const empty = document.createElement('p');
+
+    empty.className = 'empty-report';
+
+    empty.textContent =
+      'Todavia no existen secciones iniciadas '
+      + 'que requieran seguimiento.';
+
+    elements.dashboardPriorityList.append(empty);
+  }
+}
+
 function renderDashboard(overview) {
   if (!overview) return;
 
@@ -409,6 +815,8 @@ function renderDashboard(overview) {
   renderDashboardDirections(
     overview.directions || [],
   );
+
+  renderDashboardPriorities(overview);
 
   const directions =
     overview.directions || [];
@@ -1181,7 +1589,7 @@ function renderExplorerPhysical(
         ? (
           `${fieldConditionLabel(
             observation.details?.physicalCondition,
-          )} ? `
+          )} \u00b7 `
           + functionalityLabel(
             observation.details?.functionality,
           )
@@ -1573,7 +1981,7 @@ function renderExplorerRecent(observations) {
     const meta = document.createElement('small');
 
     meta.textContent =
-      `${status.label} ? ${dateTime(observation.observedAt)}`;
+      `${status.label} \u00b7 ${dateTime(observation.observedAt)}`;
 
     body.append(
       code,
@@ -1995,7 +2403,7 @@ function renderExplorerFindings(
       || 'Sin funcionamiento registrado';
 
     meta.textContent =
-      `${physicalCondition} ? ${functionality}`;
+      `${physicalCondition} \u00b7 ${functionality}`;
 
     body.append(
       eyebrow,
@@ -2107,7 +2515,7 @@ function renderExplorerEvidence(
     const type = document.createElement('small');
     type.textContent =
       item.available === false
-        ? `${item.typeLabel} ? NO DISPONIBLE`
+        ? `${item.typeLabel} \u00b7 NO DISPONIBLE`
         : item.typeLabel;
 
     caption.append(
@@ -2145,6 +2553,198 @@ function renderExplorerEvidence(
 
     elements.explorerEvidence.append(empty);
   }
+}
+
+
+function csvValue(value) {
+  const text =
+    String(value ?? '');
+
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function explorerEvidenceCount(
+  observation,
+) {
+  if (!observation) return 0;
+
+  const incidence =
+    findIncidenceForObservation(
+      observation,
+    );
+
+  return number(
+    incidence?.evidenceCount,
+  );
+}
+
+function downloadExplorerCsv() {
+  const section =
+    state.explorerSection;
+
+  if (!section) return;
+
+  const byAsset = new Map(
+    state.explorerObservations
+      .filter(({ assetId }) => assetId)
+      .map(
+        (observation) => [
+          number(observation.assetId),
+          observation,
+        ],
+      ),
+  );
+
+  const rows = [[
+    'Tipo',
+    'Codigo',
+    'Bien',
+    'Marca',
+    'Modelo',
+    'Serie',
+    'Estado terreno',
+    'Conservacion',
+    'Funcionamiento',
+    'Direccion',
+    'Departamento',
+    'Seccion',
+    'Fecha observacion',
+    'Evidencias',
+  ]];
+
+  for (const asset of state.explorerAssets) {
+    const observation =
+      byAsset.get(number(asset.id));
+
+    rows.push([
+      'Bien esperado',
+      asset.assetCode || '',
+      asset.name || '',
+      asset.brand || '',
+      asset.model || '',
+      asset.serialNumber || '',
+      observationStateLabel(
+        observation,
+      ),
+      fieldConditionLabel(
+        observation?.details?.physicalCondition,
+      ),
+      functionalityLabel(
+        observation?.details?.functionality,
+      ),
+      section.directionName,
+      section.departmentName,
+      section.section,
+      observation?.observedAt
+        ? dateTime(observation.observedAt)
+        : '',
+      explorerEvidenceCount(
+        observation,
+      ),
+    ]);
+  }
+
+  for (
+    const observation
+    of state.explorerObservations
+      .filter(({ assetId }) => !assetId)
+  ) {
+    rows.push([
+      'Hallazgo adicional',
+      observation.provisionalCode || '',
+      observation.details?.provisional?.description
+        || 'Bien fisico no registrado',
+      observation.details?.provisional?.brand || '',
+      observation.details?.provisional?.model || '',
+      observation.details?.provisional?.serialNumber || '',
+      observationStateLabel(
+        observation,
+      ),
+      fieldConditionLabel(
+        observation.details?.physicalCondition,
+      ),
+      functionalityLabel(
+        observation.details?.functionality,
+      ),
+      section.directionName,
+      section.departmentName,
+      section.section,
+      observation.observedAt
+        ? dateTime(observation.observedAt)
+        : '',
+      explorerEvidenceCount(
+        observation,
+      ),
+    ]);
+  }
+
+  const content =
+    '\uFEFF'
+    + rows
+      .map(
+        (row) =>
+          row.map(csvValue).join(';'),
+      )
+      .join('\r\n');
+
+  const blob = new Blob(
+    [content],
+    {
+      type:
+        'text/csv;charset=utf-8',
+    },
+  );
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement('a');
+
+  const safeSection =
+    String(section.section || 'seccion')
+      .normalize('NFD')
+      .replace(
+        /[\u0300-\u036f]/g,
+        '',
+      )
+      .replace(
+        /[^a-zA-Z0-9_-]+/g,
+        '-',
+      )
+      .replace(
+        /^-+|-+$/g,
+        '',
+      );
+
+  link.href = url;
+  link.download =
+    `inventario-${safeSection || 'seccion'}.csv`;
+
+  document.body.append(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+}
+
+function printExplorerPhysical() {
+  if (!state.explorerSection) return;
+
+  document.body.classList.add(
+    'print-physical-view',
+  );
+
+  window.print();
+
+  window.setTimeout(
+    () => {
+      document.body.classList.remove(
+        'print-physical-view',
+      );
+    },
+    250,
+  );
 }
 
 function setExplorerTab(tab) {
@@ -2292,6 +2892,9 @@ async function refreshExplorerSection({
     elements.explorerEmpty.hidden = true;
     elements.explorerContent.hidden = false;
 
+    elements.exportSectionCsv.disabled = false;
+    elements.printPhysicalView.disabled = false;
+
     elements.explorerStatus.textContent =
       section.sessionId
         ? (
@@ -2327,6 +2930,10 @@ async function selectExplorerSection() {
 
     elements.explorerContent.hidden = true;
     elements.explorerEmpty.hidden = false;
+
+    elements.exportSectionCsv.disabled = true;
+    elements.printPhysicalView.disabled = true;
+
     elements.explorerStatus.textContent =
       'Seleccione una seccion';
 
@@ -2903,6 +3510,17 @@ elements.explorerSearch.addEventListener(
       state.explorerObservations,
     );
   },
+);
+
+
+elements.exportSectionCsv.addEventListener(
+  'click',
+  downloadExplorerCsv,
+);
+
+elements.printPhysicalView.addEventListener(
+  'click',
+  printExplorerPhysical,
 );
 
 elements.presentationMode.addEventListener(

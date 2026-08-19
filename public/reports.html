@@ -38,6 +38,34 @@
         </section>
 
 
+        <nav id="dashboard-bi-nav"
+          class="dashboard-bi-nav no-print"
+          aria-label="Navegaci&oacute;n del dashboard">
+
+          <div class="dashboard-bi-nav__brand">
+            <strong>Control de Inventario</strong>
+            <span>Seguimiento ejecutivo</span>
+          </div>
+
+          <div class="dashboard-bi-nav__links">
+            <a href="#dashboard-control-v2">
+              Resumen
+            </a>
+
+            <a href="#dashboard-priorities">
+              Prioridades
+            </a>
+
+            <a href="#dashboard-explorer">
+              Explorador
+            </a>
+
+            <a href="#incidence-report">
+              Incidencias
+            </a>
+          </div>
+        </nav>
+
         <section id="dashboard-control-v2"
           class="dashboard-v2 no-print"
           aria-labelledby="dashboard-title">
@@ -121,6 +149,57 @@
         </section>
 
 
+        <section id="dashboard-priorities"
+          class="dashboard-priorities no-print"
+          aria-labelledby="dashboard-priorities-title">
+
+          <div class="dashboard-priorities__header">
+            <div>
+              <p class="section-kicker">
+                GESTI&Oacute;N DEL OPERATIVO
+              </p>
+
+              <h2 id="dashboard-priorities-title">
+                Estado y prioridades por dependencia
+              </h2>
+
+              <p>
+                Identifica secciones iniciadas que requieren
+                atenci&oacute;n por incidencias, hallazgos o pendientes.
+              </p>
+            </div>
+          </div>
+
+          <div id="dashboard-unit-status"
+            class="dashboard-unit-status">
+          </div>
+
+          <article class="dashboard-priority-panel">
+
+            <div class="dashboard-priority-panel__heading">
+              <div>
+                <p class="section-kicker">
+                  PRIORIZACI&Oacute;N OPERACIONAL
+                </p>
+
+                <h3>
+                  Secciones que requieren atenci&oacute;n
+                </h3>
+              </div>
+
+              <span>
+                La prioridad no constituye calificaci&oacute;n
+                administrativa ni jur&iacute;dica.
+              </span>
+            </div>
+
+            <div id="dashboard-priority-list"
+              class="dashboard-priority-list">
+            </div>
+
+          </article>
+        </section>
+
         <section id="dashboard-explorer"
           class="dashboard-explorer no-print"
           aria-labelledby="explorer-title">
@@ -136,6 +215,20 @@
                 en cada dependencia.
               </p>
             </div>
+
+            <button id="export-section-csv"
+              type="button"
+              class="secondary"
+              disabled>
+              Exportar planilla CSV
+            </button>
+
+            <button id="print-physical-view"
+              type="button"
+              class="secondary"
+              disabled>
+              Imprimir vista f&iacute;sica
+            </button>
 
             <button id="dashboard-presentation-mode"
               type="button"
