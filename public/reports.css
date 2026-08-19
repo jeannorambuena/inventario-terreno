@@ -1964,3 +1964,48 @@ body.dashboard-presentation .dashboard-explorer {
     display: none;
   }
 }
+
+
+/* Persistent executive navigation */
+
+.executive-query__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.executive-query-narrative {
+  border-left: 4px solid var(--info);
+  border-radius: .4rem;
+  background: var(--surface-muted);
+}
+
+.executive-query-narrative article {
+  display: grid;
+  gap: .25rem;
+  padding: .75rem .85rem;
+}
+
+.executive-query-narrative strong {
+  color: var(--wada-slate);
+  font-size: .72rem;
+}
+
+.executive-query-narrative p {
+  color: var(--text);
+  font-size: .72rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 620px) {
+  .executive-query__toolbar {
+    display: grid;
+    grid-template-columns:
+      1fr 1fr;
+  }
+
+  .executive-query__toolbar button {
+    width: 100%;
+  }
+}

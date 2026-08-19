@@ -51,6 +51,9 @@ const elements = {
   executiveQueryIndicators: document.querySelector('#executive-query-indicators'),
   executiveQueryRanking: document.querySelector('#executive-query-ranking'),
   executiveQueryRankingTitle: document.querySelector('#executive-query-ranking-title'),
+  executiveQueryCopyLink: document.querySelector('#executive-query-copy-link'),
+  executiveQueryExport: document.querySelector('#executive-query-export'),
+  executiveQueryNarrative: document.querySelector('#executive-query-narrative'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -332,6 +335,437 @@ function renderDashboardDirections(directions) {
 }
 
 
+
+
+function updateDashboardUrl({
+  replace = true,
+} = {}) {
+  const url =
+    new URL(window.location.href);
+
+  if (state.explorerLocationId) {
+    url.searchParams.set(
+      'locationId',
+      String(state.explorerLocationId),
+    );
+  } else {
+    url.searchParams.delete(
+      'locationId',
+    );
+  }
+
+  if (
+    state.explorerTab
+    && state.explorerTab !== 'expected'
+  ) {
+    url.searchParams.set(
+      'tab',
+      state.explorerTab,
+    );
+  } else {
+    url.searchParams.delete('tab');
+  }
+
+  const queryLevel =
+    elements.executiveQueryLevel?.value
+    || 'municipality';
+
+  url.searchParams.set(
+    'level',
+    queryLevel,
+  );
+
+  const queryUnit =
+    elements.executiveQueryUnit?.value
+    || '';
+
+  if (queryUnit) {
+    url.searchParams.set(
+      'unit',
+      queryUnit,
+    );
+  } else {
+    url.searchParams.delete(
+      'unit',
+    );
+  }
+
+  const method =
+    replace ? 'replaceState' : 'pushState';
+
+  history[method](
+    null,
+    '',
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
+function restoreDashboardQueryState() {
+  const params =
+    new URLSearchParams(
+      window.location.search,
+    );
+
+  const level =
+    params.get('level');
+
+  if (
+    [
+      'municipality',
+      'direction',
+      'department',
+      'section',
+    ].includes(level)
+  ) {
+    elements.executiveQueryLevel.value =
+      level;
+  }
+
+  refreshExecutiveQueryOptions();
+
+  const unit =
+    params.get('unit');
+
+  if (
+    unit
+    && [...elements.executiveQueryUnit.options]
+      .some(
+        ({ value }) =>
+          value === unit,
+      )
+  ) {
+    elements.executiveQueryUnit.value =
+      unit;
+
+    renderExecutiveQuery();
+  }
+
+  const tab =
+    params.get('tab');
+
+  if (
+    [
+      'expected',
+      'findings',
+      'evidence',
+      'physical',
+      'summary',
+    ].includes(tab)
+  ) {
+    state.explorerTab = tab;
+    setExplorerTab(
+      tab,
+      {
+        updateUrl: false,
+      },
+    );
+  }
+}
+
+async function restoreExplorerLocationFromUrl() {
+  const params =
+    new URLSearchParams(
+      window.location.search,
+    );
+
+  const locationId =
+    number(
+      params.get('locationId'),
+    );
+
+  if (!locationId) return;
+
+  const exists =
+    allOverviewSections(
+      state.overview,
+    ).some(
+      (section) =>
+        number(section.locationId)
+        === locationId,
+    );
+
+  if (!exists) return;
+
+  await openExplorerLocation(
+    locationId,
+    {
+      scroll: false,
+      updateUrl: false,
+    },
+  );
+}
+
+async function copyDashboardLink() {
+  updateDashboardUrl();
+
+  const value =
+    window.location.href;
+
+  try {
+    await navigator.clipboard.writeText(
+      value,
+    );
+
+    setMessage(
+      'Enlace de consulta copiado.',
+    );
+
+  } catch {
+    const temporary =
+      document.createElement('textarea');
+
+    temporary.value = value;
+    temporary.setAttribute(
+      'readonly',
+      '',
+    );
+
+    temporary.style.position =
+      'fixed';
+
+    temporary.style.opacity = '0';
+
+    document.body.append(temporary);
+    temporary.select();
+
+    document.execCommand('copy');
+    temporary.remove();
+
+    setMessage(
+      'Enlace de consulta copiado.',
+    );
+  }
+}
+
+function executiveNarrative(
+  scope,
+  set,
+) {
+  const parts = [];
+
+  parts.push(
+    `${scope.label}: `
+    + `${set.reviewed} de ${set.expected} `
+    + `bienes esperados tienen resultado `
+    + `de terreno (${set.coverage}% de cobertura).`,
+  );
+
+  if (set.reviewed > 0) {
+    parts.push(
+      `${set.conforming} de los revisados `
+      + `estan conformes `
+      + `(${set.conformity}%).`,
+    );
+  }
+
+  if (set.incidences > 0) {
+    parts.push(
+      `Existen ${set.incidences} `
+      + `incidencia(s) vigente(s) `
+      + `que requieren seguimiento.`,
+    );
+  } else if (set.reviewed > 0) {
+    parts.push(
+      'No existen incidencias vigentes '
+      + 'en los registros revisados.',
+    );
+  }
+
+  if (set.findings > 0) {
+    parts.push(
+      `Ademas se registraron `
+      + `${set.findings} hallazgo(s) `
+      + `adicional(es) al maestro.`,
+    );
+  }
+
+  if (set.pending > 0) {
+    parts.push(
+      `Permanecen ${set.pending} `
+      + `bien(es) esperado(s) `
+      + `pendientes de resultado.`,
+    );
+  }
+
+  return parts.join(' ');
+}
+
+function renderExecutiveNarrative(
+  scope,
+  set,
+) {
+  elements.executiveQueryNarrative
+    .replaceChildren();
+
+  const article =
+    document.createElement('article');
+
+  const heading =
+    document.createElement('strong');
+
+  heading.textContent =
+    'Lectura ejecutiva';
+
+  const paragraph =
+    document.createElement('p');
+
+  paragraph.textContent =
+    executiveNarrative(
+      scope,
+      set,
+    );
+
+  article.append(
+    heading,
+    paragraph,
+  );
+
+  elements.executiveQueryNarrative
+    .append(article);
+}
+
+function executiveCsvRows(
+  scope,
+) {
+  const rows = [[
+    'Nivel',
+    'Unidad',
+    'Bienes esperados',
+    'Revisados',
+    'Cobertura %',
+    'Conformes',
+    'Conformidad %',
+    'Incidencias',
+    'Tasa incidencia %',
+    'Pendientes',
+    'Hallazgos adicionales',
+  ]];
+
+  const parent =
+    executiveMetricSet(
+      scope.metrics,
+    );
+
+  rows.push([
+    'Consulta',
+    scope.label,
+    parent.expected,
+    parent.reviewed,
+    parent.coverage,
+    parent.conforming,
+    parent.conformity,
+    parent.incidences,
+    parent.incidenceRate,
+    parent.pending,
+    parent.findings,
+  ]);
+
+  for (const child of scope.children) {
+    const metrics =
+      childExecutiveMetrics(
+        scope.childType,
+        child,
+      );
+
+    const set =
+      executiveMetricSet(
+        metrics,
+      );
+
+    rows.push([
+      scope.childType || '',
+      childExecutiveLabel(
+        scope.childType,
+        child,
+      ),
+      set.expected,
+      set.reviewed,
+      set.coverage,
+      set.conforming,
+      set.conformity,
+      set.incidences,
+      set.incidenceRate,
+      set.pending,
+      set.findings,
+    ]);
+  }
+
+  return rows;
+}
+
+function downloadExecutiveQueryCsv() {
+  const scope =
+    resolveExecutiveScope(
+      state.overview,
+      elements.executiveQueryLevel.value,
+      elements.executiveQueryUnit.value,
+    );
+
+  if (!scope) {
+    setMessage(
+      'Seleccione una unidad antes de exportar.',
+      true,
+    );
+
+    return;
+  }
+
+  const rows =
+    executiveCsvRows(scope);
+
+  const content =
+    '\uFEFF'
+    + rows
+      .map(
+        (row) =>
+          row.map(csvValue).join(';'),
+      )
+      .join('\r\n');
+
+  const blob =
+    new Blob(
+      [content],
+      {
+        type:
+          'text/csv;charset=utf-8',
+      },
+    );
+
+  const url =
+    URL.createObjectURL(blob);
+
+  const link =
+    document.createElement('a');
+
+  const safeName =
+    String(scope.label)
+      .normalize('NFD')
+      .replace(
+        /[\u0300-\u036f]/g,
+        '',
+      )
+      .replace(
+        /[^a-zA-Z0-9_-]+/g,
+        '-',
+      )
+      .replace(
+        /^-+|-+$/g,
+        '',
+      )
+      .toLowerCase();
+
+  link.href = url;
+
+  link.download =
+    `consulta-inventario-`
+    + `${safeName || 'municipio'}.csv`;
+
+  document.body.append(link);
+  link.click();
+  link.remove();
+
+  URL.revokeObjectURL(url);
+}
 
 function executiveMetricSet(metrics = {}) {
   const expected =
@@ -1040,6 +1474,10 @@ function renderExecutiveQuery() {
 
   renderExecutiveIndicators(set);
   renderExecutiveRanking(scope);
+  renderExecutiveNarrative(
+    scope,
+    set,
+  );
 
   elements.executiveQueryCutoff
     .textContent =
@@ -1048,9 +1486,18 @@ function renderExecutiveQuery() {
     }`;
 }
 
-function refreshExecutiveQueryOptions() {
+function refreshExecutiveQueryOptions(
+  {
+    preserveSelection = false,
+  } = {},
+) {
   const level =
     elements.executiveQueryLevel.value;
+
+  const previousValue =
+    preserveSelection
+      ? elements.executiveQueryUnit.value
+      : '';
 
   if (level === 'municipality') {
     elements.executiveQueryUnitWrap.hidden =
@@ -1077,6 +1524,7 @@ function refreshExecutiveQueryOptions() {
   setExplorerOptions(
     elements.executiveQueryUnit,
     options,
+    previousValue,
   );
 
   renderExecutiveQuery();
@@ -1159,6 +1607,10 @@ function appendUnitStatus(
 
 async function openExplorerLocation(
   locationId,
+  {
+    scroll = true,
+    updateUrl = true,
+  } = {},
 ) {
   const sections =
     allOverviewSections(state.overview);
@@ -1231,12 +1683,20 @@ async function openExplorerLocation(
 
   await refreshExplorerSection();
 
-  document.querySelector(
-    '#dashboard-explorer',
-  )?.scrollIntoView({
-    behavior: 'smooth',
-    block: 'start',
-  });
+  if (updateUrl) {
+    updateDashboardUrl({
+      replace: false,
+    });
+  }
+
+  if (scroll) {
+    document.querySelector(
+      '#dashboard-explorer',
+    )?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    });
+  }
 }
 
 function renderDashboardPriorities(overview) {
@@ -3505,7 +3965,12 @@ function printExplorerPhysical() {
   );
 }
 
-function setExplorerTab(tab) {
+function setExplorerTab(
+  tab,
+  {
+    updateUrl = true,
+  } = {},
+) {
   state.explorerTab = tab;
 
   document.querySelectorAll(
@@ -3530,6 +3995,10 @@ function setExplorerTab(tab) {
         panel.dataset.explorerPanel !== tab;
     },
   );
+
+  if (updateUrl) {
+    updateDashboardUrl();
+  }
 }
 
 async function refreshExplorerSection({
@@ -3695,6 +4164,10 @@ async function selectExplorerSection() {
     elements.explorerStatus.textContent =
       'Seleccione una seccion';
 
+    updateDashboardUrl({
+      replace: false,
+    });
+
     return;
   }
 
@@ -3702,6 +4175,10 @@ async function selectExplorerSection() {
     number(section.locationId);
 
   await refreshExplorerSection();
+
+  updateDashboardUrl({
+    replace: false,
+  });
 }
 
 function openExplorerDirection(directionName) {
@@ -3739,7 +4216,10 @@ async function refreshDashboardOverview() {
     renderDashboard(overview);
     renderOverview(overview);
     refreshExplorerFilters(overview);
-    refreshExecutiveQueryOptions();
+
+    refreshExecutiveQueryOptions({
+      preserveSelection: true,
+    });
 
     if (state.explorerLocationId) {
       await refreshExplorerSection({
@@ -4141,7 +4621,19 @@ async function loadSessionReport(sessionId) {
   renderCloseReport(report.summary);
   renderIncidences(report.incidences);
   renderRegularization(report.regularization);
-  history.replaceState(null, '', `/reports?sessionId=${sessionId}`);
+  const reportUrl =
+    new URL(window.location.href);
+
+  reportUrl.searchParams.set(
+    'sessionId',
+    String(sessionId),
+  );
+
+  history.replaceState(
+    null,
+    '',
+    `${reportUrl.pathname}${reportUrl.search}${reportUrl.hash}`,
+  );
   setMessage(`Informe de la sesión ${sessionId} actualizado.`);
 }
 
@@ -4161,14 +4653,35 @@ elements.sessionSelect.addEventListener('change', async () => {
 
 
 
+
+elements.executiveQueryCopyLink.addEventListener(
+  'click',
+  copyDashboardLink,
+);
+
+elements.executiveQueryExport.addEventListener(
+  'click',
+  downloadExecutiveQueryCsv,
+);
+
 elements.executiveQueryLevel.addEventListener(
   'change',
-  refreshExecutiveQueryOptions,
+  () => {
+    refreshExecutiveQueryOptions();
+    updateDashboardUrl({
+      replace: false,
+    });
+  },
 );
 
 elements.executiveQueryUnit.addEventListener(
   'change',
-  renderExecutiveQuery,
+  () => {
+    renderExecutiveQuery();
+    updateDashboardUrl({
+      replace: false,
+    });
+  },
 );
 
 elements.explorerDirection.addEventListener(
@@ -4210,6 +4723,10 @@ elements.explorerDirection.addEventListener(
 
     elements.explorerContent.hidden = true;
     elements.explorerEmpty.hidden = false;
+
+    updateDashboardUrl({
+      replace: false,
+    });
   },
 );
 
@@ -4247,6 +4764,10 @@ elements.explorerDepartment.addEventListener(
 
     elements.explorerContent.hidden = true;
     elements.explorerEmpty.hidden = false;
+
+    updateDashboardUrl({
+      replace: false,
+    });
   },
 );
 
@@ -4359,6 +4880,11 @@ async function initialize() {
     renderDashboard(overview);
     renderOverview(overview);
     refreshExplorerFilters(overview);
+
+    restoreDashboardQueryState();
+
+    await restoreExplorerLocationFromUrl();
+
     startDashboardRefresh();
 
     for (const session of sessions) {
