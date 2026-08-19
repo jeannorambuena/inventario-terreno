@@ -1,4 +1,8 @@
 import {
+  getFieldEvidencePolicy,
+  validateFieldRequirements,
+} from './field-rules.js';
+import {
   createMobileDeviceSuffix,
   createPollingFailureTracker,
   createSafeNetworkError,
@@ -570,102 +574,94 @@ elements.lookupForm.addEventListener('submit', async (event) => {
   }
 });
 
+function mobileElementForField(field) {
+  const selectors = {
+    label: '#mobile-label',
+    physicalCondition: '#mobile-physical',
+    functionality: '#mobile-functionality',
+    situations: 'input[name="situation"]',
+    'provisional.description': '#mobile-provisional-description',
+    'physicalPoint.type': '#mobile-point',
+    'physicalPoint.reference': '#mobile-point-reference',
+    discrepancies: '#mobile-discrepancy-value',
+    'incomplete.parts': '#mobile-incomplete-part',
+    'incomplete.other': '#mobile-incomplete-part',
+    'custody.destination': '#mobile-custody-destination',
+    'custody.basis': '#mobile-custody-basis',
+    'review.reason': '#mobile-review-reason',
+  };
+
+  return selectors[field]
+    ? elements.observationForm.querySelector(selectors[field])
+    : null;
+}
+
 function validateMobileIncidence(details) {
-  const errors = [];
-  const add = (message, element) => errors.push({ message, element });
+  const errors = validateFieldRequirements({
+    assetId: state.lookup?.asset?.id || null,
+    status: elements.status.value,
+    details,
+    isIncidence: true,
+  }).map((error) => ({
+    ...error,
+    element: mobileElementForField(error.field),
+  }));
 
-  const noMasterAsset = !state.lookup?.asset;
+  const evidencePolicy = getFieldEvidencePolicy({
+    assetId: state.lookup?.asset?.id || null,
+    status: elements.status.value,
+    details,
+  });
 
-  if (noMasterAsset && !details.situations.includes('bien_no_registrado')) {
-    add(
-      'Marque "Bien no registrado" para un hallazgo que no pudo asociarse al inventario maestro.',
-      elements.observationForm.querySelector('input[name="situation"][value="bien_no_registrado"]'),
-    );
-  }
-
-  if (noMasterAsset && !details.provisional.description.trim()) {
-    add(
-      'Ingrese una descripci?n del bien adicional.',
-      document.querySelector('#mobile-provisional-description'),
-    );
-  }
-
-  if (!details.physicalPoint.type) {
-    add(
-      'Seleccione el punto f?sico donde se encontr? el bien.',
-      document.querySelector('#mobile-point'),
-    );
-  }
-
-  if (details.physicalPoint.type === 'otro' && !details.physicalPoint.reference.trim()) {
-    add(
-      'Especifique la referencia del punto f?sico.',
-      document.querySelector('#mobile-point-reference'),
-    );
-  }
-
-  if (
-    details.situations.includes('requiere_revision')
-    && !details.review.reason
-  ) {
-    add(
-      'Seleccione el motivo de la revisi?n pendiente.',
-      document.querySelector('#mobile-review-reason'),
-    );
-  }
-
-  if (
-    details.physicalCondition === 'incompleto'
-    && details.incomplete.parts.length === 0
-  ) {
-    add(
-      'Indique qu? componente falta.',
-      document.querySelector('#mobile-incomplete-part'),
-    );
-  }
-
-  const needsCustody = details.situations.some((value) =>
-    ['en_reparacion', 'prestamo_informado', 'traslado_no_regularizado'].includes(value)
+  const evidenceTypes = new Set(
+    state.evidenceQueue.map(({ type }) => type),
   );
 
-  if (needsCustody && !details.custody.destination.trim()) {
-    add(
-      'Indique destino, unidad o persona relacionada con el bien.',
-      document.querySelector('#mobile-custody-destination'),
-    );
-  }
+  for (const requiredType of evidencePolicy.required) {
+    if (!evidenceTypes.has(requiredType)) {
+      const label = {
+        bien_completo: 'Bien completo',
+        etiqueta_patrimonial: 'Etiqueta patrimonial',
+        serie_modelo: 'Serie / modelo',
+        dano: 'Da?o',
+        ubicacion: 'Ubicaci?n',
+      }[requiredType] || requiredType;
 
-  if (needsCustody && !details.custody.basis) {
-    add(
-      'Indique si la informaci?n fue informada o verificada.',
-      document.querySelector('#mobile-custody-basis'),
-    );
-  }
-
-  if (
-    noMasterAsset
-    && !state.evidenceQueue.some(({ type }) => type === 'bien_completo')
-  ) {
-    add(
-      'Este hallazgo sin c?digo requiere una fotograf?a de tipo "Bien completo".',
-      elements.addEvidence,
-    );
+      errors.push({
+        code: `missing_evidence_${requiredType}`,
+        field: `evidence.${requiredType}`,
+        section: 'evidence',
+        message: `Falta evidencia obligatoria: ${label}.`,
+        element: elements.addEvidence,
+      });
+    }
   }
 
   for (const { file } of state.evidenceQueue) {
     if (file.size > 8 * 1024 * 1024) {
-      add(
-        `La fotograf?a ${file.name} supera el m?ximo de 8 MB. Tome otra fotograf?a con menor tama?o.`,
-        elements.addEvidence,
-      );
+      errors.push({
+        code: 'evidence_too_large',
+        field: 'evidence',
+        section: 'evidence',
+        message:
+          `La fotograf?a ${file.name} supera el m?ximo de 8 MB.`,
+        element: elements.addEvidence,
+      });
       break;
     }
 
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      add(
-        `La fotograf?a ${file.name} no tiene un formato admitido. Use JPEG, PNG o WebP.`,
-        elements.addEvidence,
-      );
+    if (
+      !['image/jpeg', 'image/png', 'image/webp']
+        .includes(file.type)
+    ) {
+      errors.push({
+        code: 'invalid_evidence_type',
+        field: 'evidence',
+        section: 'evidence',
+        message:
+          `La fotograf?a ${file.name} debe ser JPEG, PNG o WebP.`,
+        element: elements.addEvidence,
+      });
       break;
     }
   }
