@@ -121,6 +121,8 @@ button.danger:hover { border-color: var(--danger); background: var(--danger-soft
 .last-record dl { display: grid; grid-template-columns: minmax(5rem, auto) 1fr; gap: .28rem .7rem; margin: 0; }
 .last-record dt { align-self: start; padding-top: .12rem; }
 .last-record dd { min-width: 0; }
+.master-location-line { display: block; margin-top: .35rem; color: var(--muted); font-size: .68rem; font-weight: 750; line-height: 1.4; }
+.master-location-skip { width: 100%; margin: .2rem 0 .8rem; }
 .incidence-options { display: grid; gap: .5rem; margin-bottom: .7rem; }
 .control-field select { min-height: 3.2rem; padding: .72rem 2.25rem .72rem .8rem; border-width: 1.5px; font-weight: 750; }
 .incidence-options { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-muted); }

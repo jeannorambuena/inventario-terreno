@@ -591,6 +591,18 @@
                 aria-pressed="false">
                 Expediente
               </button>
+
+              <button type="button"
+                data-explorer-tab="reconciliation"
+                aria-pressed="false">
+                Conciliaci&oacute;n
+              </button>
+
+              <button type="button"
+                data-explorer-tab="regularizations"
+                aria-pressed="false">
+                Regularizaciones
+              </button>
             </nav>
 
             <section id="explorer-panel-expected"
@@ -828,6 +840,37 @@
                 class="explorer-summary-sheet">
               </article>
 
+            </section>
+
+            <section id="explorer-panel-reconciliation"
+              class="explorer-panel"
+              data-explorer-panel="reconciliation"
+              hidden>
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Informe de conciliaci&oacute;n de inventario f&iacute;sico</h3>
+                  <p>Estado seg&uacute;n maestro versus realidad observada. Las acciones son propuestas de trabajo, no actos administrativos.</p>
+                </div>
+                <div class="reconciliation-actions no-print">
+                  <button id="export-reconciliation-csv" type="button" class="secondary" disabled>Exportar CSV para activo fijo</button>
+                  <button id="print-reconciliation" type="button" class="secondary" disabled>Imprimir / Guardar PDF</button>
+                </div>
+              </div>
+              <article id="reconciliation-sheet" class="reconciliation-sheet"></article>
+            </section>
+
+            <section id="explorer-panel-regularizations"
+              class="explorer-panel"
+              data-explorer-panel="regularizations"
+              hidden>
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Regularizaciones pendientes</h3>
+                  <p>Lista de trabajo para el Encargado de Inventario. No modifica la plataforma oficial de activo fijo.</p>
+                </div>
+                <span id="regularizations-count" class="count-badge">0</span>
+              </div>
+              <div id="regularizations-worklist" class="regularizations-worklist"></div>
             </section>
 
           </div>

@@ -1,3 +1,5 @@
+import { safeSpreadsheetValue } from './csv-safety.js';
+
 const elements = {
   sessionSelect: document.querySelector('#session-select'),
   printReport: document.querySelector('#print-report'),
@@ -69,6 +71,11 @@ const elements = {
   printAuditPackage: document.querySelector('#print-audit-package'),
   exportAuditCsv: document.querySelector('#export-audit-csv'),
   downloadAuditManifest: document.querySelector('#download-audit-manifest'),
+  reconciliationSheet: document.querySelector('#reconciliation-sheet'),
+  exportReconciliationCsv: document.querySelector('#export-reconciliation-csv'),
+  printReconciliation: document.querySelector('#print-reconciliation'),
+  regularizationsWorklist: document.querySelector('#regularizations-worklist'),
+  regularizationsCount: document.querySelector('#regularizations-count'),
   overviewMetrics: document.querySelector('#overview-metrics'),
   overviewProgress: document.querySelector('#overview-progress'),
   unitTree: document.querySelector('#unit-tree'),
@@ -117,6 +124,7 @@ const state = {
   explorerAuditQuery: '',
   explorerAuditFilter: 'all',
   explorerAuditPackage: null,
+  explorerReconciliation: null,
 };
 
 async function api(path) {
@@ -5354,9 +5362,186 @@ function renderExplorerEvidence(
 }
 
 
+function reconciliationLocation(value, fallback = '—') {
+  return value ? locationText(value) : fallback;
+}
+
+function reconciliationDefinition(container, label, value) {
+  const item = document.createElement('div');
+  const term = document.createElement('span');
+  const detail = document.createElement('strong');
+  term.textContent = label;
+  detail.textContent = value || '—';
+  item.append(term, detail);
+  container.append(item);
+}
+
+function renderReconciliation(reconciliation) {
+  elements.reconciliationSheet.replaceChildren();
+  state.explorerReconciliation = reconciliation || null;
+  elements.exportReconciliationCsv.disabled = !reconciliation;
+  elements.printReconciliation.disabled = !reconciliation;
+  if (!reconciliation) {
+    const empty = document.createElement('p');
+    empty.className = 'empty-report';
+    empty.textContent = 'La sección todavía no tiene una sesión de levantamiento.';
+    elements.reconciliationSheet.append(empty);
+    renderRegularizations(null);
+    return;
+  }
+
+  const header = document.createElement('header');
+  header.className = 'reconciliation-cover';
+  const identity = document.createElement('div');
+  const municipality = document.createElement('p');
+  municipality.className = 'reconciliation-municipality';
+  municipality.textContent = 'MUNICIPALIDAD DE ROMERAL';
+  const title = document.createElement('h2');
+  title.textContent = 'INFORME DE CONCILIACIÓN DE INVENTARIO FÍSICO';
+  const disclaimer = document.createElement('p');
+  disclaimer.textContent = 'Documento de levantamiento y conciliación. No ejecuta altas, bajas, traslados ni modificaciones del activo fijo oficial.';
+  identity.append(municipality, title, disclaimer);
+  const stamp = document.createElement('div');
+  stamp.className = 'reconciliation-stamp';
+  const status = document.createElement('strong');
+  status.textContent = reconciliation.status;
+  const code = document.createElement('span');
+  code.textContent = reconciliation.reportCode;
+  stamp.append(status, code);
+  header.append(identity, stamp);
+
+  const scope = document.createElement('section');
+  scope.className = 'reconciliation-definitions';
+  const source = reconciliation.masterSource || {};
+  const session = reconciliation.session;
+  for (const [label, value] of [
+    ['Dirección', session.direction], ['Departamento', session.department], ['Sección', session.section],
+    ['Fecha inicio', dateTime(session.startedAt)], ['Fecha cierre', session.completedAt ? dateTime(session.completedAt) : 'Sesión aún abierta'],
+    ['Operador', session.operatorCode], ['Código de sesión', session.sessionCode],
+    ['Fuente maestra', [source.sourceName, source.sheetName].filter(Boolean).join(' / ')],
+    ['Fecha de importación', dateTime(source.importedAt)], ['Bienes esperados', String(reconciliation.summary.bienesEsperados)],
+  ]) reconciliationDefinition(scope, label, value);
+
+  const summaryTitle = document.createElement('h3');
+  summaryTitle.textContent = 'Resumen ejecutivo';
+  const metrics = document.createElement('div');
+  metrics.className = 'reconciliation-metrics';
+  for (const [label, value] of [
+    ['Bienes según maestro', 'bienesEsperados'], ['Bienes revisados', 'bienesEsperadosRevisados'],
+    ['Bienes conformes', 'bienesConformes'], ['Bienes con incidencias', 'incidencias'],
+    ['No encontrados', 'noUbicados'], ['Otra ubicación', 'diferenciasUbicacion'],
+    ['Hallazgos adicionales', 'hallazgosProvisionales'], ['Terceros / arriendo', 'tercerosNoMunicipales'],
+    ['Problemas de etiqueta', 'problemasEtiqueta'], ['No operativos', 'noOperativos'],
+    ['Propuestas de baja', 'propuestasBaja'], ['Requieren revisión', 'requiereRevision'],
+  ]) {
+    const card = document.createElement('article');
+    const caption = document.createElement('span');
+    const numberValue = document.createElement('strong');
+    caption.textContent = label;
+    numberValue.textContent = String(number(reconciliation.summary[value]));
+    card.append(caption, numberValue);
+    metrics.append(card);
+  }
+
+  const conclusionTitle = document.createElement('h3');
+  conclusionTitle.textContent = 'Conclusiones del levantamiento';
+  const conclusions = document.createElement('ul');
+  conclusions.className = 'reconciliation-conclusions';
+  for (const text of reconciliation.conclusions || []) {
+    const item = document.createElement('li');
+    item.textContent = text;
+    conclusions.append(item);
+  }
+
+  const matrixTitle = document.createElement('h3');
+  matrixTitle.textContent = 'Matriz de conciliación';
+  const matrixWrap = document.createElement('div');
+  matrixWrap.className = 'reconciliation-table-wrap';
+  const table = document.createElement('table');
+  table.className = 'reconciliation-table';
+  const head = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  for (const label of ['Código', 'Bien / identificación', 'Ubicación según maestro', 'Ubicación observada', 'Resultado físico', 'Incidencias', 'Acción propuesta', 'Trazabilidad']) {
+    const cell = document.createElement('th'); cell.scope = 'col'; cell.textContent = label; headRow.append(cell);
+  }
+  head.append(headRow); table.append(head);
+  const body = document.createElement('tbody');
+  for (const row of reconciliation.rows || []) {
+    const tr = document.createElement('tr');
+    const identityText = [row.name, [row.brand, row.model, row.serialNumber].filter(Boolean).join(' / ')].filter(Boolean).join(' — ');
+    for (const value of [
+      row.code || 'Sin código municipal', identityText,
+      reconciliationLocation(row.masterLocation, row.kind === 'additional_finding' ? 'NO EXISTE EN MAESTRO' : '—'),
+      reconciliationLocation(row.observedLocation), row.outcome,
+      (row.incidences || []).map(({ label }) => label).join('; ') || '—',
+      (row.proposedActions || []).map(({ label }) => label).join('; '),
+    ]) { const cell = document.createElement('td'); cell.textContent = value; tr.append(cell); }
+    const links = document.createElement('td');
+    if (row.traceabilityUrl) {
+      const history = document.createElement('a'); history.href = row.traceabilityUrl; history.textContent = 'Ver historial'; history.className = 'text-link no-print'; links.append(history);
+    }
+    if (row.evidence?.[0]) {
+      const evidence = document.createElement('a'); evidence.href = row.evidence[0].url; evidence.textContent = 'Ver evidencia'; evidence.className = 'text-link no-print'; links.append(evidence);
+    }
+    if (!links.childNodes.length) links.textContent = '—';
+    tr.append(links); body.append(tr);
+  }
+  table.append(body); matrixWrap.append(table);
+
+  const annexTitle = document.createElement('h3');
+  annexTitle.textContent = 'Anexo de regularizaciones';
+  const annex = document.createElement('div');
+  annex.className = 'reconciliation-annex';
+  for (const group of reconciliation.regularizations || []) {
+    const section = document.createElement('section');
+    const heading = document.createElement('h4'); heading.textContent = `${group.label} (${group.items.length})`;
+    const list = document.createElement('ul');
+    for (const row of group.items) { const item = document.createElement('li'); item.textContent = `${row.code || 'Sin código'} — ${row.name} — ${reconciliationLocation(row.masterLocation, 'Sin maestro')} → ${reconciliationLocation(row.observedLocation)}`; list.append(item); }
+    section.append(heading, list); annex.append(section);
+  }
+  if (!(reconciliation.regularizations || []).length) {
+    const empty = document.createElement('p'); empty.textContent = 'No existen regularizaciones derivadas del estado vigente.'; annex.append(empty);
+  }
+
+  const verification = document.createElement('footer');
+  verification.className = 'reconciliation-verification';
+  verification.textContent = `SHA-256 ${reconciliation.digestSha256} · alcance ${reconciliation.digestScope} · corte ${dateTime(reconciliation.snapshotAt)}`;
+  elements.reconciliationSheet.append(header, scope, summaryTitle, metrics, conclusionTitle, conclusions, matrixTitle, matrixWrap, annexTitle, annex, verification);
+  renderRegularizations(reconciliation);
+}
+
+function renderRegularizations(reconciliation) {
+  elements.regularizationsWorklist.replaceChildren();
+  const groups = reconciliation?.regularizations || [];
+  const total = groups.reduce((sum, group) => sum + group.items.length, 0);
+  elements.regularizationsCount.textContent = String(total);
+  for (const group of groups) {
+    const section = document.createElement('section');
+    section.className = 'regularization-group';
+    const heading = document.createElement('h4'); heading.textContent = `${group.label} (${group.items.length})`;
+    const table = document.createElement('div'); table.className = 'regularization-work-table';
+    for (const row of group.items) {
+      const item = document.createElement('article');
+      const identity = document.createElement('div');
+      const code = document.createElement('strong'); code.textContent = row.code || 'Sin código municipal';
+      const name = document.createElement('span'); name.textContent = row.name;
+      const locations = document.createElement('small'); locations.textContent = `Maestro: ${reconciliationLocation(row.masterLocation, 'Sin maestro')} · Observado: ${reconciliationLocation(row.observedLocation)}`;
+      identity.append(code, name, locations);
+      const meta = document.createElement('div');
+      const incidence = document.createElement('span'); incidence.textContent = (row.incidences || []).map(({ label }) => label).join(', ') || row.outcome;
+      const evidence = document.createElement('span'); evidence.textContent = row.evidence?.length ? `Evidencia: ${row.evidence.length}` : 'Sin evidencia vigente';
+      const date = document.createElement('time'); date.textContent = row.observedAt ? dateTime(row.observedAt) : 'Sin observación';
+      meta.append(incidence, evidence, date); item.append(identity, meta); table.append(item);
+    }
+    section.append(heading, table); elements.regularizationsWorklist.append(section);
+  }
+  if (!groups.length) {
+    const empty = document.createElement('p'); empty.className = 'empty-report'; empty.textContent = reconciliation ? 'No hay regularizaciones pendientes para esta sección.' : 'Seleccione una sección con sesión.'; elements.regularizationsWorklist.append(empty);
+  }
+}
+
 function csvValue(value) {
-  const text =
-    String(value ?? '');
+  const text = safeSpreadsheetValue(value);
 
   return `"${text.replaceAll('"', '""')}"`;
 }
@@ -5545,6 +5730,45 @@ function printExplorerPhysical() {
   );
 }
 
+function downloadReconciliationCsv() {
+  const report = state.explorerReconciliation;
+  if (!report) return;
+  const rows = [[
+    'codigo_bien', 'nombre_bien', 'direccion_maestro', 'departamento_maestro',
+    'seccion_maestro', 'direccion_observada', 'departamento_observado',
+    'seccion_observada', 'resultado_terreno', 'incidencias', 'accion_propuesta',
+    'fecha_levantamiento', 'sesion', 'evidencia', 'observaciones',
+  ]];
+  for (const row of report.rows || []) {
+    rows.push([
+      row.code || 'sin código municipal', row.name, row.masterLocation?.direction || '',
+      row.masterLocation?.department || '', row.masterLocation?.section || '',
+      row.observedLocation?.direction || '', row.observedLocation?.department || '',
+      row.observedLocation?.section || '', row.outcome,
+      (row.incidences || []).map(({ label }) => label).join(' | '),
+      (row.proposedActions || []).map(({ label }) => label).join(' | '),
+      row.observedAt ? dateTime(row.observedAt) : '', report.session.sessionCode,
+      (row.evidence || []).map(({ sha256, url }) => `${sha256} ${url}`).join(' | '), row.notes || '',
+    ]);
+  }
+  const content = '\uFEFF' + rows.map((row) => row.map(csvValue).join(';')).join('\r\n');
+  const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  const safeSection = String(report.session.section || 'seccion').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  link.href = url;
+  link.download = `conciliacion-${safeSection || 'seccion'}-sesion-${report.session.id}.csv`;
+  document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+}
+
+function printReconciliationReport() {
+  if (!state.explorerReconciliation) return;
+  document.body.classList.add('print-reconciliation');
+  window.print();
+  window.setTimeout(() => document.body.classList.remove('print-reconciliation'), 250);
+}
+
 function setExplorerTab(
   tab,
   {
@@ -5613,6 +5837,7 @@ async function refreshExplorerSection({
     let report = null;
     let audit = [];
     let auditPackage = null;
+    let reconciliation = null;
 
     if (section.sessionId) {
       const [
@@ -5620,6 +5845,7 @@ async function refreshExplorerSection({
         observationsResult,
         reportResult,
         auditPackageResult,
+        reconciliationResult,
       ] = await Promise.all([
         api(
           `/api/assets?locationId=${section.locationId}`,
@@ -5632,6 +5858,9 @@ async function refreshExplorerSection({
         ),
         api(
           `/api/sessions/${section.sessionId}/audit-package`,
+        ),
+        api(
+          `/api/sessions/${section.sessionId}/reconciliation`,
         ),
       ]);
 
@@ -5646,6 +5875,9 @@ async function refreshExplorerSection({
 
       auditPackage =
         auditPackageResult.package || null;
+
+      reconciliation =
+        reconciliationResult.reconciliation || null;
 
       audit =
         auditPackage?.audit || [];
@@ -5670,6 +5902,8 @@ async function refreshExplorerSection({
     state.explorerAuditEvents = audit;
     state.explorerAuditPackage =
       auditPackage;
+    state.explorerReconciliation =
+      reconciliation;
 
     renderExplorerMetrics(section);
 
@@ -5714,6 +5948,10 @@ async function refreshExplorerSection({
       report,
     );
 
+    renderReconciliation(
+      reconciliation,
+    );
+
     elements.explorerBreadcrumb.textContent =
       `${section.directionName} / `
       + `${section.departmentName} / `
@@ -5739,6 +5977,12 @@ async function refreshExplorerSection({
 
     elements.downloadAuditManifest.disabled =
       !packageReady;
+
+    elements.exportReconciliationCsv.disabled =
+      !reconciliation;
+
+    elements.printReconciliation.disabled =
+      !reconciliation;
 
     elements.explorerStatus.textContent =
       section.sessionId
@@ -5773,11 +6017,14 @@ async function selectExplorerSection() {
     state.explorerLocationId = null;
     state.explorerSessionId = null;
     state.explorerAuditPackage = null;
+    state.explorerReconciliation = null;
 
     elements.openAuditPackage.disabled = true;
     elements.printAuditPackage.disabled = true;
     elements.exportAuditCsv.disabled = true;
     elements.downloadAuditManifest.disabled = true;
+    elements.exportReconciliationCsv.disabled = true;
+    elements.printReconciliation.disabled = true;
 
     elements.explorerContent.hidden = true;
     elements.explorerEmpty.hidden = false;
@@ -6511,6 +6758,16 @@ elements.exportSectionCsv.addEventListener(
 elements.printPhysicalView.addEventListener(
   'click',
   printExplorerPhysical,
+);
+
+elements.exportReconciliationCsv.addEventListener(
+  'click',
+  downloadReconciliationCsv,
+);
+
+elements.printReconciliation.addEventListener(
+  'click',
+  printReconciliationReport,
 );
 
 elements.presentationMode.addEventListener(

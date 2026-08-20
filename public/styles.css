@@ -192,6 +192,8 @@ button.danger:hover { border-color: var(--danger); background: var(--danger-soft
 .last-record__content strong { color: var(--primary-strong); font-size: 1rem; }
 .last-record__content span { min-width: 0; font-weight: 800; overflow-wrap: anywhere; }
 .last-record__content em { color: var(--success); font-size: .78rem; font-style: normal; font-weight: 850; }
+.master-location-line { grid-column: 1 / -1; color: var(--muted); font-size: .72rem; font-weight: 750; }
+.master-location-skip { width: auto; margin-top: .75rem; }
 .last-record__row > button { width: auto; flex: 0 0 auto; }
 
 .asset-card { padding: var(--space-4); border: 1px solid #c4ccb2; border-left: 5px solid var(--primary); border-radius: var(--radius-md); background: #fbfcf7; }

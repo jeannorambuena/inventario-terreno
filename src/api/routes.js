@@ -17,6 +17,7 @@ import {
   groupRegularization,
   parseStructuredNotes,
 } from '../reporting.js';
+import { createReconciliationReport } from '../reconciliation.js';
 import {
   evaluateFieldClosureReadiness,
   fieldCatalog,
@@ -426,9 +427,13 @@ function getLastObservation(database, sessionId) {
       o.created_at AS createdAt,
       a.asset_code AS assetCode,
       a.scanner_code AS scannerCode,
-      a.name AS assetName
+      a.name AS assetName,
+      l.direction AS masterDirection,
+      l.department AS masterDepartment,
+      l.section AS masterSection
     FROM observations o
     LEFT JOIN assets a ON a.id = o.asset_id
+    LEFT JOIN locations l ON l.id = a.location_id
     LEFT JOIN observation_details d ON d.observation_id = o.id
     WHERE o.inventory_session_id = ? AND o.active = 1
     ORDER BY o.observed_at DESC, o.id DESC
@@ -642,6 +647,9 @@ function getSessionSummary(database, sessionId) {
       name: last.assetName || 'Bien físico no registrado',
       status: last.status,
       observedAt: last.observedAt,
+      masterDirection: last.masterDirection || null,
+      masterDepartment: last.masterDepartment || null,
+      masterSection: last.masterSection || null,
     } : null,
   };
 }
@@ -2213,6 +2221,18 @@ export function createApiRouter(database, {
     const report = createSessionReport(database, sessionId.data, evidenceRoot);
     if (!report) return response.status(404).json({ error: 'Sesión no encontrada.' });
     return response.json({ report });
+  });
+
+  router.get('/sessions/:id/reconciliation', (request, response) => {
+    const sessionId = sessionIdSchema.safeParse(request.params.id);
+    if (!sessionId.success) {
+      return response.status(400).json({ error: 'Id de sesión inválido.' });
+    }
+    const summary = getSessionSummary(database, sessionId.data);
+    if (!summary) return response.status(404).json({ error: 'Sesión no encontrada.' });
+    return response.json({
+      reconciliation: createReconciliationReport(database, summary, summary),
+    });
   });
 
   router.get('/sessions/:id/incidences', (request, response) => {

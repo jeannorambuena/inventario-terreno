@@ -98,14 +98,27 @@ if ($CertificateOk -and (Get-Command node -ErrorAction SilentlyContinue)) {
 }
 Write-Result -Check 'Certificado HTTPS' -Passed $CertificateOk -Detail $(if ($CertificateOk) { 'Certificado y clave presentes para localhost y las IP privadas actuales.' } else { 'Falta el certificado, la clave o una IP actual; ejecute scripts/setup-https.ps1.' })
 
+function Test-InventoryService {
+  param([Parameter(Mandatory)][string]$Uri)
+
+  try {
+    $Health = Invoke-RestMethod -Uri $Uri -TimeoutSec 3
+    return $Health.ok -eq $true -and $Health.service -eq 'inventario-terreno'
+  } catch {
+    return $false
+  }
+}
+
 $Listeners = @(Get-NetTCPConnection -LocalPort 3180 -State Listen -ErrorAction SilentlyContinue)
 $PortAcceptable = $Listeners.Count -eq 0
 $PortDetail = 'Puerto 3180 disponible.'
 if ($Listeners.Count -gt 0) {
   $ProjectServer = $true
+  $ProjectHealth = Test-InventoryService -Uri 'http://localhost:3180/api/health'
   foreach ($listener in $Listeners) {
     $process = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue
-    if (-not $process -or $process.Name -ne 'node.exe' -or $process.CommandLine -notmatch 'src/server\.js') {
+    $KnownCommand = $process -and $process.CommandLine -match 'src/server\.js'
+    if (-not $process -or $process.Name -ne 'node.exe' -or (-not $KnownCommand -and -not $ProjectHealth)) {
       $ProjectServer = $false
     }
   }
@@ -119,9 +132,11 @@ $HttpsPortAcceptable = $HttpsListeners.Count -eq 0
 $HttpsPortDetail = 'Puerto 3443 disponible.'
 if ($HttpsListeners.Count -gt 0) {
   $ProjectHttpsServer = $true
+  $ProjectHttpsHealth = Test-InventoryService -Uri 'https://localhost:3443/api/health'
   foreach ($listener in $HttpsListeners) {
     $process = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction SilentlyContinue
-    if (-not $process -or $process.Name -ne 'node.exe' -or $process.CommandLine -notmatch 'src/server\.js') {
+    $KnownCommand = $process -and $process.CommandLine -match 'src/server\.js'
+    if (-not $process -or $process.Name -ne 'node.exe' -or (-not $KnownCommand -and -not $ProjectHttpsHealth)) {
       $ProjectHttpsServer = $false
     }
   }

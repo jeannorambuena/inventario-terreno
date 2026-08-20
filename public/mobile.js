@@ -32,11 +32,13 @@ const elements = {
   lastCode: document.querySelector('#last-code'),
   lastName: document.querySelector('#last-name'),
   lastResult: document.querySelector('#last-result'),
+  lastMasterLocation: document.querySelector('#last-master-location'),
   resultCard: document.querySelector('#result-card'),
   classification: document.querySelector('#classification'),
   assetName: document.querySelector('#asset-name'),
   assetDetails: document.querySelector('#asset-details'),
   matchChoices: document.querySelector('#match-choices'),
+  skipOtherLocation: document.querySelector('#skip-other-location'),
   observationForm: document.querySelector('#observation-form'),
   status: document.querySelector('#status'),
   addEvidence: document.querySelector('#add-evidence'),
@@ -286,10 +288,16 @@ function setIncidenceMode(active) {
   setButtonContent(elements.incidenceMode, 'warning', active ? 'Incidencia activa' : 'Incidencia');
 }
 
-function renderLastRecord({ code, name, result }) {
+function masterLocationText(asset) {
+  return [asset?.direction, asset?.department, asset?.section].filter(Boolean).join(' → ');
+}
+
+function renderLastRecord({ code, name, result, asset = null }) {
   elements.lastCode.textContent = code || '—';
   elements.lastName.textContent = name || 'Bien sin descripción';
   elements.lastResult.textContent = result;
+  const location = masterLocationText(asset);
+  elements.lastMasterLocation.textContent = location ? `Ubicación según maestro: ${location}` : '';
   elements.lastRecord.hidden = false;
 }
 
@@ -300,6 +308,7 @@ function resetEntryFlow() {
   elements.evidenceStatus.textContent = '';
   elements.evidenceQueue.replaceChildren();
   elements.resultCard.hidden = true;
+  elements.skipOtherLocation.hidden = true;
   state.lookup = null;
   for (const item of state.evidenceQueue) if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
   state.evidenceQueue = [];
@@ -327,6 +336,7 @@ async function registerObservation({ lookup, status, observation = '' }) {
       code: lookup.asset?.assetCode || lookup.code,
       name: lookup.asset?.name || 'Bien físico no registrado',
       result: status === 'verificado' ? 'Encontrado en ubicación correcta' : 'Incidencia registrada',
+      asset: lookup.asset,
     });
     resetEntryFlow();
     message(status === 'verificado' ? 'Bien registrado. Listo para el siguiente código.' : 'Incidencia registrada.');
@@ -421,6 +431,11 @@ function showIncidence(lookup) {
     detail('Código escáner', asset.scannerCode);
     detail('Marca', asset.brand);
     detail('Modelo', asset.model);
+    detail('UBICACIÓN SEGÚN MAESTRO', masterLocationText(asset));
+    detail('Asignación', classification === 'corresponde'
+      ? '✓ Corresponde a esta sección'
+      : '⚠ Asignado según maestro a otra dependencia');
+    elements.skipOtherLocation.hidden = classification !== 'otra_ubicacion';
   }
 
   elements.resultCard.hidden = false;
@@ -432,6 +447,12 @@ function showIncidence(lookup) {
     block: 'start',
   });
 }
+
+elements.skipOtherLocation.addEventListener('click', () => {
+  const location = masterLocationText(state.lookup?.asset);
+  resetEntryFlow();
+  message(`No se creó una observación. Revise este bien en su sección administrativa${location ? `: ${location}` : '.'}`);
+});
 
 async function handleLookup(lookup) {
   if (lookup.ambiguous) {
@@ -468,7 +489,7 @@ async function handleLookup(lookup) {
   setIncidenceMode(true);
   showIncidence(lookup);
   message(lookup.classification === 'otra_ubicacion'
-    ? 'El bien pertenece a otra ubicación. Complete la incidencia.'
+    ? 'El maestro lo asigna a otra sección. Si está físicamente aquí, registre Otra ubicación; si sólo está comprobando, use No registrar aquí.'
     : 'Complete la incidencia antes de registrar.');
 }
 
@@ -1333,6 +1354,7 @@ elements.observationForm.addEventListener('submit', async (event) => {
         || details.provisional.description
         || 'Bien físico no registrado',
       result: 'Incidencia registrada',
+      asset: lookup.asset,
     });
 
     resetEntryFlow();

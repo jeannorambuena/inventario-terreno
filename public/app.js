@@ -38,6 +38,8 @@ const elements = {
   lastCode: document.querySelector('#last-code'),
   lastName: document.querySelector('#last-name'),
   lastResult: document.querySelector('#last-result'),
+  lastMasterLocation: document.querySelector('#last-master-location'),
+  skipOtherLocation: document.querySelector('#skip-other-location'),
   undoLast: document.querySelector('#undo-last'),
   undoDialog: document.querySelector('#undo-dialog'),
   undoForm: document.querySelector('#undo-form'),
@@ -205,6 +207,11 @@ function resultLabel(status) {
   })[status] || 'Observación registrada';
 }
 
+function masterLocationText(asset) {
+  return [asset?.direction ?? asset?.masterDirection, asset?.department ?? asset?.masterDepartment,
+    asset?.section ?? asset?.masterSection].filter(Boolean).join(' → ');
+}
+
 function renderLastRecord(observation, canUndo = false) {
   state.lastObservation = observation;
   if (!observation) {
@@ -216,6 +223,10 @@ function renderLastRecord(observation, canUndo = false) {
   elements.lastCode.textContent = code || '—';
   elements.lastName.textContent = name || 'Bien sin descripción';
   elements.lastResult.textContent = resultLabel(status);
+  const masterLocation = masterLocationText(observation);
+  elements.lastMasterLocation.textContent = masterLocation
+    ? `Ubicación según maestro: ${masterLocation}`
+    : '';
   elements.undoLast.hidden = !canUndo || !observation.observationCode;
   elements.lastRecord.hidden = false;
 }
@@ -286,6 +297,7 @@ function resetEntryFlow() {
   elements.evidenceStatus.textContent = '';
   elements.evidenceQueue.replaceChildren();
   elements.assetResult.hidden = true;
+  elements.skipOtherLocation.hidden = true;
   elements.observationForm.hidden = true;
   state.asset = null;
   state.provisionalCode = null;
@@ -683,9 +695,13 @@ function showAsset(asset, provisionalCode) {
     appendDetail(elements.assetDetails, 'Marca', asset.brand);
     appendDetail(elements.assetDetails, 'Modelo', asset.model);
     appendDetail(elements.assetDetails, 'Serie', asset.serialNumber);
+    appendDetail(elements.assetDetails, 'UBICACIÓN SEGÚN MAESTRO', masterLocationText(asset));
     if (asset.locationId === state.locationId) {
+      appendDetail(elements.assetDetails, 'Asignación', '✓ Corresponde a esta sección');
       elements.observationStatus.value = 'dato_distinto';
     } else {
+      appendDetail(elements.assetDetails, 'Asignación', '⚠ Asignado según maestro a otra dependencia');
+      elements.skipOtherLocation.hidden = false;
       elements.observationStatus.value = 'otra_ubicacion';
       const otherLocation = elements.observationForm.querySelector('input[name="situation"][value="otra_ubicacion"]');
       otherLocation.checked = true;
@@ -704,6 +720,12 @@ function showAsset(asset, provisionalCode) {
   setIncidenceMode(true);
 }
 
+elements.skipOtherLocation.addEventListener('click', () => {
+  const location = masterLocationText(state.asset);
+  resetEntryFlow();
+  setMessage(`No se creó una observación. Revise este bien en su sección administrativa${location ? `: ${location}` : '.'}`);
+});
+
 async function handleResolvedAsset(asset, code) {
   if (asset.locationId === state.locationId && !state.incidenceMode) {
     await registerObservation({ asset, status: 'verificado', lookupCode: code });
@@ -712,7 +734,7 @@ async function handleResolvedAsset(asset, code) {
   showAsset(asset, null);
   setMessage(asset.locationId === state.locationId
     ? 'Complete la incidencia antes de registrar.'
-    : 'El bien pertenece a otra ubicación. Registre la incidencia.');
+    : 'El maestro lo asigna a otra sección. Si está físicamente aquí, registre Otra ubicación; si sólo está comprobando, use No registrar aquí.');
   elements.observationForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 

@@ -166,6 +166,11 @@ Comprobar en `/reports`:
 9. Exportación CSV.
 10. Impresión / guardado PDF.
 11. Descarga del manifiesto JSON.
+12. Pestaña **Conciliación**: ubicación maestra y observada en columnas separadas.
+13. Bien de otra sección presente: conserva su ubicación maestra y muestra la oficina observada.
+14. Hallazgo adicional: aparece separado y no aumenta los bienes esperados.
+15. Pestaña **Regularizaciones**: tareas agrupadas sin modificación automática del maestro.
+16. CSV de conciliación abierto como datos, sin ejecución de fórmulas provenientes de texto capturado.
 
 ## 9. Respaldo de cierre del piloto
 
