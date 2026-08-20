@@ -207,4 +207,24 @@ describe('exportación tabular segura', () => {
     expect(css).toContain('body.print-reconciliation #reconciliation-sheet');
     expect(css).toContain('.reconciliation-table thead { display: table-header-group; }');
   });
+
+  test('hace imprimible la conciliación sin desactivar globalmente no-print', () => {
+    const css = readFileSync(new URL('../public/reports.css', import.meta.url), 'utf8');
+    expect(css).toMatch(
+      /\.no-print,[^}]*#report-message\s*\{\s*display:\s*none\s*!important;/s,
+    );
+    expect(css).toMatch(
+      /body\.print-reconciliation #dashboard-explorer,\s*body\.print-reconciliation #explorer-content,\s*body\.print-reconciliation #explorer-panel-reconciliation\s*\{\s*display:\s*block\s*!important;/s,
+    );
+    expect(css).toMatch(
+      /body\.print-reconciliation #explorer-panel-reconciliation > \*:not\(#reconciliation-sheet\),[^}]*\{\s*display:\s*none\s*!important;/s,
+    );
+    expect(css).toMatch(
+      /body\.print-reconciliation #reconciliation-sheet,\s*body\.print-reconciliation #reconciliation-sheet \*\s*\{\s*visibility:\s*visible\s*!important;/s,
+    );
+    expect(css).toContain('@page reconciliation { size: A4 landscape; margin: 11mm; }');
+    expect(css).toMatch(
+      /body\.print-reconciliation #reconciliation-sheet\s*\{[^}]*position:\s*static;/s,
+    );
+  });
 });

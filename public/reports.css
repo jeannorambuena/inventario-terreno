@@ -312,15 +312,34 @@
   .regularization-work-table article { grid-template-columns: 1fr; }
 }
 
+@page reconciliation { size: A4 landscape; margin: 11mm; }
+
 @media print {
-  @page reconciliation { size: A4 landscape; margin: 11mm; }
+  html:has(body.print-reconciliation) { background: #fff; }
 
   body.print-reconciliation * { visibility: hidden !important; }
+  body.print-reconciliation #dashboard-explorer,
+  body.print-reconciliation #explorer-content,
+  body.print-reconciliation #explorer-panel-reconciliation {
+    display: block !important;
+  }
+  body.print-reconciliation .app-shell {
+    min-height: 0;
+    overflow: visible;
+    background: #fff;
+  }
+  body.print-reconciliation .app-bar,
+  body.print-reconciliation #dashboard-explorer > *:not(#explorer-content),
+  body.print-reconciliation #explorer-content > *:not(#explorer-panel-reconciliation),
+  body.print-reconciliation #explorer-panel-reconciliation > *:not(#reconciliation-sheet),
+  body.print-reconciliation .report-section,
+  body.print-reconciliation #report-message {
+    display: none !important;
+  }
   body.print-reconciliation #reconciliation-sheet,
   body.print-reconciliation #reconciliation-sheet * { visibility: visible !important; }
   body.print-reconciliation #reconciliation-sheet {
-    position: absolute;
-    inset: 0;
+    position: static;
     width: 100%;
     page: reconciliation;
     padding: 0;
