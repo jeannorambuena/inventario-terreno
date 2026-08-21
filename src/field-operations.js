@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
+import {
+  getFieldEvidencePolicy,
+  validateFieldRequirements,
+} from '../public/field-rules.js';
 
 export const fieldCatalog = Object.freeze({
   label: Object.freeze(['correcta', 'deteriorada', 'ilegible', 'sin_etiqueta', 'posible_duplicada']),
@@ -60,15 +64,21 @@ export function normalizeFieldDetails(input = {}, legacy = {}) {
   const details = {
     label: fieldCatalog.label.includes(source.label)
       ? source.label
-      : oldIdentificationMap[legacyIdentification.find((value) => oldIdentificationMap[value])] || 'correcta',
+      : Object.hasOwn(source, 'label')
+        ? ''
+        : oldIdentificationMap[legacyIdentification.find((value) => oldIdentificationMap[value])] || 'correcta',
     physicalCondition: fieldCatalog.physicalCondition.includes(source.physicalCondition)
       ? source.physicalCondition
-      : legacyPhysical.includes('incompleto') ? 'incompleto'
-        : legacyPhysical.includes('malo') ? 'malo'
-          : legacyPhysical.includes('regular') ? 'regular' : 'bueno',
+      : Object.hasOwn(source, 'physicalCondition')
+        ? ''
+        : legacyPhysical.includes('incompleto') ? 'incompleto'
+          : legacyPhysical.includes('malo') ? 'malo'
+            : legacyPhysical.includes('regular') ? 'regular' : 'bueno',
     functionality: fieldCatalog.functionality.includes(source.functionality)
       ? source.functionality
-      : legacyPhysical.includes('no_operativo') ? 'no_operativo' : 'operativo',
+      : Object.hasOwn(source, 'functionality')
+        ? ''
+        : legacyPhysical.includes('no_operativo') ? 'no_operativo' : 'operativo',
     proposedDisposal: Boolean(source.proposedDisposal || legacyPhysical.includes('propuesta_baja')),
     situations: uniqueAllowed(source.situations?.length ? source.situations : legacySituations, fieldCatalog.situations),
     physicalPoint: {
@@ -102,79 +112,12 @@ export function normalizeFieldDetails(input = {}, legacy = {}) {
   return details;
 }
 
-export function validateFieldDetails({ assetId, status, details, isIncidence = true }) {
-  if (!isIncidence && status === 'verificado') return [];
-  const errors = [];
-  const add = (code, message, field) => errors.push({ code, message, field });
-  if (!fieldCatalog.label.includes(details.label)) add('invalid_label', 'Seleccione un estado de etiqueta válido.', 'label');
-  if (!fieldCatalog.physicalCondition.includes(details.physicalCondition)) add('invalid_physical_condition', 'Seleccione la conservación física.', 'physicalCondition');
-  if (!fieldCatalog.functionality.includes(details.functionality)) add('invalid_functionality', 'Seleccione el funcionamiento.', 'functionality');
-  if (!assetId && !details.situations.includes('bien_no_registrado')) {
-    add('provisional_situation', 'Un hallazgo adicional debe clasificarse como bien no registrado.', 'situations');
-  }
-  if (assetId && details.situations.includes('bien_no_registrado')) {
-    add('official_marked_unregistered', 'Un bien identificado del maestro no puede marcarse como no registrado.', 'situations');
-  }
-  if (status === 'otra_ubicacion' && !details.situations.includes('otra_ubicacion')) {
-    add('missing_other_location', 'Falta la situación otra ubicación.', 'situations');
-  }
-  if (!assetId && !details.provisional.description) {
-    add('provisional_description', 'Describa brevemente el bien adicional.', 'provisional.description');
-  }
-  const locationRequired = !assetId || status === 'otra_ubicacion'
-    || details.provisional.pendingIdentification || details.situations.includes('requiere_revision')
-    || details.situations.includes('traslado_no_regularizado');
-  if (locationRequired && !details.physicalPoint.type) {
-    add('physical_point', 'Indique el punto físico donde se observó el bien.', 'physicalPoint.type');
-  }
-  if (details.physicalPoint.type === 'otro' && !details.physicalPoint.reference) {
-    add('physical_reference', 'Especifique brevemente el otro punto físico.', 'physicalPoint.reference');
-  }
-  if (details.discrepancyIndicated || details.discrepancies.length > 0) {
-    if (details.discrepancies.length === 0) {
-      add('missing_discrepancy', 'Indique qué dato no coincide.', 'discrepancies');
-    }
-    for (const discrepancy of details.discrepancies) {
-      if (!discrepancy.observedValue && !discrepancy.pendingFromEvidence) {
-        add('missing_observed_value', `Registre el valor observado de ${discrepancy.field} o indique lectura posterior desde evidencia.`, 'discrepancies');
-      }
-    }
-  }
-  if (details.physicalCondition === 'incompleto') {
-    if (details.incomplete.parts.length === 0) add('missing_component', 'Indique qué componente falta.', 'incomplete.parts');
-    if (details.incomplete.parts.includes('otro') && !details.incomplete.other) {
-      add('missing_other_component', 'Describa brevemente el componente faltante.', 'incomplete.other');
-    }
-  }
-  const needsCustody = details.situations.some((value) => (
-    value === 'en_reparacion' || value === 'prestamo_informado' || value === 'traslado_no_regularizado'
-  ));
-  if (needsCustody && !details.custody.destination) add('missing_destination', 'Indique el destino o unidad informada.', 'custody.destination');
-  if (needsCustody && !details.custody.basis) add('missing_information_basis', 'Indique si la información fue informada o verificada.', 'custody.basis');
-  if (details.situations.includes('requiere_revision') && !details.review.reason) {
-    add('missing_review_reason', 'Indique qué debe revisarse.', 'review.reason');
-  }
-  return errors;
+export function validateFieldDetails(options) {
+  return validateFieldRequirements(options);
 }
 
-export function getEvidencePolicy({ assetId, status, details }) {
-  const required = new Set();
-  const recommended = new Set();
-  if (!assetId || details.situations.includes('bien_no_registrado')) required.add('bien_completo');
-  if (details.provisional.pendingIdentification) {
-    required.add('bien_completo');
-    required.add('serie_modelo');
-  }
-  if (status === 'dato_distinto' && details.discrepancies.some(({ pendingFromEvidence }) => pendingFromEvidence)) {
-    required.add('serie_modelo');
-  }
-  if (details.physicalCondition === 'incompleto') recommended.add('bien_completo');
-  if (details.functionality === 'no_operativo' || details.proposedDisposal) {
-    recommended.add('bien_completo');
-    recommended.add('dano');
-  }
-  if (status === 'otra_ubicacion') recommended.add('ubicacion');
-  return { required: [...required], recommended: [...recommended].filter((type) => !required.has(type)) };
+export function getEvidencePolicy(options) {
+  return getFieldEvidencePolicy(options);
 }
 
 export function generateProvisionalCode(database, sessionId) {

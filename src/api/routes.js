@@ -17,6 +17,7 @@ import {
   groupRegularization,
   parseStructuredNotes,
 } from '../reporting.js';
+import { createReconciliationReport } from '../reconciliation.js';
 import {
   evaluateFieldClosureReadiness,
   fieldCatalog,
@@ -190,6 +191,7 @@ function assetProjection() {
       a.asset_code AS assetCode,
       a.scanner_code AS scannerCode,
       a.name,
+      a.description,
       a.brand,
       a.serial_number AS serialNumber,
       a.model,
@@ -426,9 +428,13 @@ function getLastObservation(database, sessionId) {
       o.created_at AS createdAt,
       a.asset_code AS assetCode,
       a.scanner_code AS scannerCode,
-      a.name AS assetName
+      a.name AS assetName,
+      l.direction AS masterDirection,
+      l.department AS masterDepartment,
+      l.section AS masterSection
     FROM observations o
     LEFT JOIN assets a ON a.id = o.asset_id
+    LEFT JOIN locations l ON l.id = a.location_id
     LEFT JOIN observation_details d ON d.observation_id = o.id
     WHERE o.inventory_session_id = ? AND o.active = 1
     ORDER BY o.observed_at DESC, o.id DESC
@@ -642,6 +648,9 @@ function getSessionSummary(database, sessionId) {
       name: last.assetName || 'Bien físico no registrado',
       status: last.status,
       observedAt: last.observedAt,
+      masterDirection: last.masterDirection || null,
+      masterDepartment: last.masterDepartment || null,
+      masterSection: last.masterSection || null,
     } : null,
   };
 }
@@ -745,6 +754,7 @@ function emptySectionMetrics(expected) {
     pendientes: expected,
     incidencias: 0,
     diferenciasUbicacion: 0,
+    hallazgosProvisionales: 0,
     noRegistrados: 0,
     propuestasBaja: 0,
     pendientesRevision: 0,
@@ -754,8 +764,8 @@ function emptySectionMetrics(expected) {
 function aggregateMetrics(target, source) {
   for (const field of [
     'bienesEsperados', 'bienesEsperadosRevisados', 'bienesConformes', 'pendientes',
-    'incidencias', 'diferenciasUbicacion', 'noRegistrados', 'propuestasBaja',
-    'pendientesRevision',
+    'incidencias', 'diferenciasUbicacion', 'hallazgosProvisionales',
+    'noRegistrados', 'propuestasBaja', 'pendientesRevision',
   ]) target[field] += Number(source[field]) || 0;
   target.porcentajeRevision = target.bienesEsperados === 0
     ? 0
@@ -917,6 +927,771 @@ function prepareEvidenceFile({ evidenceRoot, file, session, code, evidenceType }
     relativePath: `${sessionDirectory}/${filename}`,
     type: evidenceType,
     buffer: file.buffer,
+  };
+}
+
+
+function parseAuditPayload(value) {
+  if (!value) {
+    return {
+      before: null,
+      after: null,
+      details: null,
+    };
+  }
+
+  try {
+    const parsed =
+      JSON.parse(String(value));
+
+    if (
+      !parsed
+      || typeof parsed !== 'object'
+      || Array.isArray(parsed)
+    ) {
+      return {
+        before: null,
+        after: null,
+        details: null,
+      };
+    }
+
+    return {
+      before: parsed.before ?? null,
+      after: parsed.after ?? null,
+      details: parsed.details ?? null,
+    };
+
+  } catch {
+    return {
+      before: null,
+      after: null,
+      details: null,
+    };
+  }
+}
+
+function auditObservationIdentity(
+  database,
+  row,
+  payload,
+) {
+  let observation = null;
+
+  if (
+    row.entityType === 'observation'
+    && row.entityId
+  ) {
+    observation = database.prepare(`
+      SELECT
+        o.id AS observationId,
+        o.observation_code AS observationCode,
+        o.asset_id AS assetId,
+        o.provisional_code AS provisionalCode,
+        o.status_code AS observationStatus,
+        o.version_number AS versionNumber,
+        o.active,
+        o.observed_at AS observedAt,
+        a.asset_code AS assetCode,
+        a.scanner_code AS scannerCode,
+        a.name AS assetName,
+        d.details_json AS detailsJson
+      FROM observations o
+      LEFT JOIN assets a
+        ON a.id = o.asset_id
+      LEFT JOIN observation_details d
+        ON d.observation_id = o.id
+      WHERE o.id = ?
+    `).get(row.entityId) ?? null;
+  }
+
+  if (
+    !observation
+    && row.entityType === 'evidence'
+    && row.entityId
+  ) {
+    observation = database.prepare(`
+      SELECT
+        o.id AS observationId,
+        o.observation_code AS observationCode,
+        o.asset_id AS assetId,
+        o.provisional_code AS provisionalCode,
+        o.status_code AS observationStatus,
+        o.version_number AS versionNumber,
+        o.active,
+        o.observed_at AS observedAt,
+        a.asset_code AS assetCode,
+        a.scanner_code AS scannerCode,
+        a.name AS assetName,
+        d.details_json AS detailsJson
+      FROM evidence_files e
+      JOIN observations o
+        ON o.id = e.observation_id
+      LEFT JOIN assets a
+        ON a.id = o.asset_id
+      LEFT JOIN observation_details d
+        ON d.observation_id = o.id
+      WHERE e.id = ?
+    `).get(row.entityId) ?? null;
+  }
+
+  if (!observation) {
+    const assetId =
+      payload?.after?.assetId
+      ?? payload?.before?.assetId
+      ?? payload?.before?.asset_id
+      ?? null;
+
+    if (assetId) {
+      const asset = database.prepare(`
+        SELECT
+          id AS assetId,
+          asset_code AS assetCode,
+          scanner_code AS scannerCode,
+          name AS assetName
+        FROM assets
+        WHERE id = ?
+      `).get(assetId);
+
+      if (asset) {
+        return {
+          ...asset,
+          observationId: null,
+          observationCode: null,
+          provisionalCode: null,
+          observationStatus: null,
+          versionNumber: null,
+          observationActive: null,
+          observedAt: null,
+          displayCode:
+            asset.assetCode
+            || row.entityCode,
+        };
+      }
+    }
+
+    return {
+      observationId: null,
+      observationCode: null,
+      assetId: null,
+      assetCode: null,
+      scannerCode: null,
+      provisionalCode: null,
+      assetName: null,
+      observationStatus: null,
+      versionNumber: null,
+      observationActive: null,
+      observedAt: null,
+      displayCode: row.entityCode,
+    };
+  }
+
+  const fieldDetails =
+    parseDetails(
+      observation.detailsJson,
+    );
+
+  const assetName =
+    observation.assetName
+    || fieldDetails.provisional?.description
+    || 'Bien fisico no registrado';
+
+  return {
+    observationId:
+      observation.observationId,
+
+    observationCode:
+      observation.observationCode,
+
+    assetId:
+      observation.assetId,
+
+    assetCode:
+      observation.assetCode,
+
+    scannerCode:
+      observation.scannerCode,
+
+    provisionalCode:
+      observation.provisionalCode,
+
+    assetName,
+
+    observationStatus:
+      observation.observationStatus,
+
+    versionNumber:
+      observation.versionNumber,
+
+    observationActive:
+      observation.active == null
+        ? null
+        : Boolean(observation.active),
+
+    observedAt:
+      observation.observedAt,
+
+    displayCode:
+      observation.assetCode
+      || observation.provisionalCode
+      || row.entityCode,
+  };
+}
+
+function serializeAuditEvent(
+  database,
+  row,
+) {
+  const payload =
+    parseAuditPayload(
+      row.detailsJson,
+    );
+
+  const identity =
+    auditObservationIdentity(
+      database,
+      row,
+      payload,
+    );
+
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    entityType: row.entityType,
+    entityCode: row.entityCode,
+    entityId: row.entityId,
+    actionCode: row.actionCode,
+    operatorCode: row.operatorCode,
+    deviceCode: row.deviceCode,
+    createdAt: row.createdAt,
+    payload,
+    ...identity,
+  };
+}
+
+function getSessionAudit(
+  database,
+  sessionId,
+) {
+  const rows = database.prepare(`
+    SELECT
+      id,
+      inventory_session_id AS sessionId,
+      entity_type AS entityType,
+      entity_code AS entityCode,
+      entity_id AS entityId,
+      action_code AS actionCode,
+      operator_code AS operatorCode,
+      device_code AS deviceCode,
+      details_json AS detailsJson,
+      created_at AS createdAt
+    FROM audit_log
+    WHERE inventory_session_id = ?
+    ORDER BY created_at DESC, id DESC
+  `).all(sessionId);
+
+  return rows.map(
+    (row) =>
+      serializeAuditEvent(
+        database,
+        row,
+      ),
+  );
+}
+
+function searchTraceability(
+  database,
+  query,
+) {
+  const escaped =
+    String(query)
+      .replace(
+        /[\\%_]/g,
+        '\\$&',
+      );
+
+  const pattern =
+    `%${escaped}%`;
+
+  const rows = database.prepare(`
+    SELECT
+      o.id AS observationId,
+      o.inventory_session_id AS sessionId,
+      s.location_id AS locationId,
+      l.direction,
+      l.department,
+      l.section,
+      o.asset_id AS assetId,
+      a.asset_code AS assetCode,
+      a.scanner_code AS scannerCode,
+      a.name AS assetName,
+      o.provisional_code AS provisionalCode,
+      o.observation_code AS observationCode,
+      o.status_code AS observationStatus,
+      o.version_number AS versionNumber,
+      o.active,
+      o.observed_at AS observedAt,
+      d.details_json AS detailsJson
+    FROM observations o
+    JOIN inventory_sessions s
+      ON s.id = o.inventory_session_id
+    JOIN locations l
+      ON l.id = s.location_id
+    LEFT JOIN assets a
+      ON a.id = o.asset_id
+    LEFT JOIN observation_details d
+      ON d.observation_id = o.id
+    WHERE
+      a.asset_code LIKE ? ESCAPE '\\'
+      OR a.scanner_code LIKE ? ESCAPE '\\'
+      OR a.name LIKE ? ESCAPE '\\'
+      OR o.provisional_code LIKE ? ESCAPE '\\'
+      OR o.observation_code LIKE ? ESCAPE '\\'
+    ORDER BY
+      o.active DESC,
+      o.observed_at DESC,
+      o.id DESC
+    LIMIT 100
+  `).all(
+    pattern,
+    pattern,
+    pattern,
+    pattern,
+    pattern,
+  );
+
+  const matches = new Map();
+
+  for (const row of rows) {
+    const identity =
+      row.assetId
+        ? `asset:${row.assetId}`
+        : `provisional:${row.provisionalCode}`;
+
+    const key =
+      `${row.sessionId}:${identity}`;
+
+    const details =
+      parseDetails(
+        row.detailsJson,
+      );
+
+    const assetName =
+      row.assetName
+      || details.provisional?.description
+      || 'Bien fisico no registrado';
+
+    const displayCode =
+      row.assetCode
+      || row.provisionalCode
+      || row.observationCode;
+
+    if (!matches.has(key)) {
+      matches.set(
+        key,
+        {
+          sessionId: row.sessionId,
+          locationId: row.locationId,
+          direction: row.direction,
+          department: row.department,
+          section: row.section,
+          assetId: row.assetId,
+          assetCode: row.assetCode,
+          scannerCode: row.scannerCode,
+          provisionalCode:
+            row.provisionalCode,
+          displayCode,
+          assetName,
+          currentStatus:
+            row.observationStatus,
+          currentVersion:
+            row.versionNumber,
+          current:
+            Boolean(row.active),
+          observedAt:
+            row.observedAt,
+          versions: 1,
+        },
+      );
+
+      continue;
+    }
+
+    const existing =
+      matches.get(key);
+
+    existing.versions += 1;
+
+    existing.currentVersion =
+      Math.max(
+        Number(existing.currentVersion) || 1,
+        Number(row.versionNumber) || 1,
+      );
+
+    if (row.active) {
+      existing.current = true;
+      existing.currentStatus =
+        row.observationStatus;
+      existing.observedAt =
+        row.observedAt;
+    }
+  }
+
+  return [
+    ...matches.values(),
+  ];
+}
+
+
+function canonicalAuditValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(
+      canonicalAuditValue,
+    );
+  }
+
+  if (
+    value
+    && typeof value === 'object'
+  ) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map(
+          (key) => [
+            key,
+            canonicalAuditValue(
+              value[key],
+            ),
+          ],
+        ),
+    );
+  }
+
+  return value;
+}
+
+function auditPackageDigest(value) {
+  const canonical =
+    canonicalAuditValue(value);
+
+  return createHash('sha256')
+    .update(
+      JSON.stringify(canonical),
+    )
+    .digest('hex');
+}
+
+function getEvidenceIntegrityPackage(
+  database,
+  sessionId,
+  evidenceRoot,
+) {
+  const rows = database.prepare(`
+    SELECT
+      e.id,
+      e.evidence_code AS evidenceCode,
+      e.evidence_type AS type,
+      e.relative_path AS relativePath,
+      e.mime_type AS mimeType,
+      e.byte_size AS byteSize,
+      e.sha256,
+      e.created_at AS createdAt,
+      o.id AS observationId,
+      o.observation_code AS observationCode,
+      o.provisional_code AS provisionalCode,
+      a.asset_code AS assetCode
+    FROM evidence_files e
+    JOIN observations o
+      ON o.id = e.observation_id
+    LEFT JOIN assets a
+      ON a.id = o.asset_id
+    WHERE
+      e.inventory_session_id = ?
+      AND e.active = 1
+      AND o.active = 1
+    ORDER BY e.id
+  `).all(sessionId);
+
+  let available = 0;
+  let missing = 0;
+  let invalid = 0;
+
+  const files = rows.map(
+    (record) => {
+      const state =
+        inspectEvidenceFile(
+          record,
+          evidenceRoot,
+          {
+            verifyHash: true,
+          },
+        );
+
+      if (state.state === 'available') {
+        available += 1;
+      }
+
+      if (state.state === 'missing') {
+        missing += 1;
+      }
+
+      if (state.state === 'invalid') {
+        invalid += 1;
+      }
+
+      return {
+        id: record.id,
+        evidenceCode:
+          record.evidenceCode,
+        observationId:
+          record.observationId,
+        observationCode:
+          record.observationCode,
+        displayCode:
+          record.assetCode
+          || record.provisionalCode
+          || record.observationCode,
+        type: record.type,
+        mimeType: record.mimeType,
+        byteSize: record.byteSize,
+        sha256: record.sha256,
+        createdAt: record.createdAt,
+        available: state.available,
+        state: state.state,
+      };
+    },
+  );
+
+  const exceptions =
+    database.prepare(`
+      SELECT COUNT(*) AS count
+      FROM evidence_exceptions x
+      JOIN observations o
+        ON o.id = x.observation_id
+      WHERE
+        x.inventory_session_id = ?
+        AND o.active = 1
+    `).get(sessionId).count;
+
+  return {
+    activeFiles: files.length,
+    available,
+    missing,
+    invalid,
+    exceptions,
+    integrityOk:
+      missing === 0
+      && invalid === 0,
+    files,
+  };
+}
+
+function getObservationLifecycle(
+  database,
+  sessionId,
+) {
+  const counts =
+    database.prepare(`
+      SELECT
+        COUNT(*) AS totalVersions,
+        COALESCE(SUM(
+          CASE WHEN active = 1
+          THEN 1 ELSE 0 END
+        ), 0) AS activeRecords,
+        COALESCE(SUM(
+          CASE WHEN active = 0
+          THEN 1 ELSE 0 END
+        ), 0) AS historicalRecords,
+        COALESCE(MAX(version_number), 0)
+          AS highestVersion
+      FROM observations
+      WHERE inventory_session_id = ?
+    `).get(sessionId);
+
+  const auditCounts =
+    database.prepare(`
+      SELECT
+        COALESCE(SUM(
+          CASE
+            WHEN action_code =
+              'observation_corrected'
+            THEN 1 ELSE 0
+          END
+        ), 0) AS corrections,
+
+        COALESCE(SUM(
+          CASE
+            WHEN action_code =
+              'observation_annulled'
+            THEN 1 ELSE 0
+          END
+        ), 0) AS observationAnnulments,
+
+        COALESCE(SUM(
+          CASE
+            WHEN action_code =
+              'evidence_annulled'
+            THEN 1 ELSE 0
+          END
+        ), 0) AS evidenceAnnulments,
+
+        COALESCE(SUM(
+          CASE
+            WHEN action_code =
+              'undo_last_observation'
+            THEN 1 ELSE 0
+          END
+        ), 0) AS reversals
+
+      FROM audit_log
+      WHERE inventory_session_id = ?
+    `).get(sessionId);
+
+  return {
+    totalVersions:
+      counts.totalVersions,
+    activeRecords:
+      counts.activeRecords,
+    historicalRecords:
+      counts.historicalRecords,
+    highestVersion:
+      counts.highestVersion,
+    corrections:
+      auditCounts.corrections,
+    observationAnnulments:
+      auditCounts.observationAnnulments,
+    evidenceAnnulments:
+      auditCounts.evidenceAnnulments,
+    reversals:
+      auditCounts.reversals,
+  };
+}
+
+function createAuditPackage(
+  database,
+  sessionId,
+  evidenceRoot,
+) {
+  const summary =
+    getSessionSummary(
+      database,
+      sessionId,
+    );
+
+  if (!summary) return null;
+
+  const audit =
+    getSessionAudit(
+      database,
+      sessionId,
+    );
+
+  const incidences =
+    getSessionIncidences(
+      database,
+      sessionId,
+      evidenceRoot,
+    );
+
+  const evidenceIntegrity =
+    getEvidenceIntegrityPackage(
+      database,
+      sessionId,
+      evidenceRoot,
+    );
+
+  const lifecycle =
+    getObservationLifecycle(
+      database,
+      sessionId,
+    );
+
+  const generatedAt =
+    new Date().toISOString();
+
+  const packageCode =
+    `AUD-S${sessionId}-L${summary.locationId}`;
+
+  const digestManifest = {
+    schemaVersion: 2,
+
+    digestAlgorithm:
+      'SHA-256',
+
+    digestScope:
+      'canonical-audit-snapshot-v2',
+
+    packageCode,
+    sessionId,
+
+    locationId:
+      summary.locationId,
+
+    direction:
+      summary.direction,
+
+    department:
+      summary.department,
+
+    section:
+      summary.section,
+
+    auditEvents:
+      audit.length,
+
+    incidences:
+      incidences.length,
+
+    evidenceFiles:
+      evidenceIntegrity.activeFiles,
+
+    evidenceIntegrity:
+      evidenceIntegrity.integrityOk
+        ? 'PASS'
+        : 'REVIEW',
+  };
+
+  const snapshot = {
+    summary,
+    lifecycle,
+    evidenceIntegrity,
+    incidences,
+    audit,
+  };
+
+  const digestInput = {
+    manifest:
+      digestManifest,
+
+    snapshot,
+  };
+
+  const digestSha256 =
+    auditPackageDigest(
+      digestInput,
+    );
+
+  const verification = {
+    ...digestInput,
+    digestSha256,
+  };
+
+  return {
+    manifest: {
+      ...digestManifest,
+
+      generatedAt,
+
+      digestSha256,
+    },
+
+    summary,
+    lifecycle,
+    evidenceIntegrity,
+    incidences,
+    audit,
+    verification,
   };
 }
 
@@ -1225,9 +2000,11 @@ export function createApiRouter(database, {
       WHERE a.asset_code LIKE ? ESCAPE '\\'
          OR a.scanner_code LIKE ? ESCAPE '\\'
          OR a.name LIKE ? ESCAPE '\\'
+         OR a.description LIKE ? ESCAPE '\\'
+         OR a.serial_number LIKE ? ESCAPE '\\'
       ORDER BY a.asset_code
       LIMIT 50
-    `).all(pattern, pattern, pattern);
+    `).all(pattern, pattern, pattern, pattern, pattern);
     return response.json({ assets });
   });
 
@@ -1252,6 +2029,31 @@ export function createApiRouter(database, {
       asset: matches.length === 1 ? matches[0] : null,
       matches,
       ambiguous: matches.length > 1,
+    });
+  });
+
+  router.get('/audit/search', (request, response) => {
+    const query =
+      String(request.query.q ?? '')
+        .trim()
+        .slice(0, 120);
+
+    if (query.length < 2) {
+      return response.status(400).json({
+        error:
+          'Indique al menos dos caracteres para buscar trazabilidad.',
+      });
+    }
+
+    const matches =
+      searchTraceability(
+        database,
+        query,
+      );
+
+    return response.json({
+      query,
+      matches,
     });
   });
 
@@ -1384,12 +2186,56 @@ export function createApiRouter(database, {
     response.json({ sessions });
   });
 
+  router.get('/sessions/:id/audit-package', (request, response) => {
+    const sessionId =
+      sessionIdSchema.safeParse(
+        request.params.id,
+      );
+
+    if (!sessionId.success) {
+      return response.status(400).json({
+        error:
+          'Id de sesion invalido.',
+      });
+    }
+
+    const auditPackage =
+      createAuditPackage(
+        database,
+        sessionId.data,
+        evidenceRoot,
+      );
+
+    if (!auditPackage) {
+      return response.status(404).json({
+        error:
+          'Sesion no encontrada.',
+      });
+    }
+
+    return response.json({
+      package: auditPackage,
+    });
+  });
+
   router.get('/sessions/:id/report', (request, response) => {
     const sessionId = sessionIdSchema.safeParse(request.params.id);
     if (!sessionId.success) return response.status(400).json({ error: 'Id de sesión inválido.' });
     const report = createSessionReport(database, sessionId.data, evidenceRoot);
     if (!report) return response.status(404).json({ error: 'Sesión no encontrada.' });
     return response.json({ report });
+  });
+
+  router.get('/sessions/:id/reconciliation', (request, response) => {
+    const sessionId = sessionIdSchema.safeParse(request.params.id);
+    if (!sessionId.success) {
+      return response.status(400).json({ error: 'Id de sesión inválido.' });
+    }
+    const summary = getSessionSummary(database, sessionId.data);
+    if (!summary) return response.status(404).json({ error: 'Sesión no encontrada.' });
+    return response.json({
+      reconciliation: createReconciliationReport(database, summary, summary),
+    });
   });
 
   router.get('/sessions/:id/incidences', (request, response) => {
@@ -1546,6 +2392,52 @@ export function createApiRouter(database, {
       if (error.status === 409) return response.status(409).json({ error: error.message });
       throw error;
     }
+  });
+
+  router.get('/sessions/:id/audit', (request, response) => {
+    const sessionId =
+      sessionIdSchema.safeParse(
+        request.params.id,
+      );
+
+    if (!sessionId.success) {
+      return response.status(400).json({
+        error: 'Id de sesion invalido.',
+      });
+    }
+
+    const session =
+      getSessionSummary(
+        database,
+        sessionId.data,
+      );
+
+    if (!session) {
+      return response.status(404).json({
+        error: 'Sesion no encontrada.',
+      });
+    }
+
+    const audit =
+      getSessionAudit(
+        database,
+        sessionId.data,
+      );
+
+    return response.json({
+      session: {
+        id: session.id,
+        status: session.status,
+        locationId: session.locationId,
+        direction: session.direction,
+        department: session.department,
+        section: session.section,
+        startedAt: session.startedAt,
+        completedAt: session.completedAt,
+        cancelledAt: session.cancelledAt,
+      },
+      audit,
+    });
   });
 
   router.get('/sessions/:id/observations', (request, response) => {

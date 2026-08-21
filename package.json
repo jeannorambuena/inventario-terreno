@@ -8,9 +8,17 @@
     "backup": "node src/database/backup.js",
     "import": "node src/importer/run-import.js",
     "start": "node src/server.js",
-    "test": "vitest run",
+    "test": "vitest run --pool=threads --maxWorkers=1",
     "test:mobile": "vitest run tests/mobile.test.js",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:field": "node scripts/verify-field-integrity.js",
+    "backup:operational": "node src/database/operational-backup.js create",
+    "backup:verify": "node src/database/operational-backup.js verify-latest",
+    "backup:package": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/package-operational-backup.ps1",
+    "recovery:drill": "node scripts/recovery-drill.js",
+    "pilot:ready": "npm test && npm run verify:field && npm run backup:operational && npm run backup:verify",
+    "release:check": "node scripts/release-readiness.js",
+    "pilot:preflight": "npm test && npm run verify:field && npm run backup:operational && npm run backup:verify && npm run release:check"
   },
   "engines": {
     "node": ">=24 <25"

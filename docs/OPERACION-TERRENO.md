@@ -12,6 +12,8 @@ El maestro representa lo que debería existir. La sesión registra únicamente l
 4. Use los controles adicionales sólo ante ausencia, incidencia, hallazgo adicional, discrepancia o corrección.
 5. El teléfono es auxiliar. Si falla, continúe toda la visita en el notebook.
 
+Al consultar un código, la ficha muestra **Ubicación según maestro**. Si el bien pertenece administrativamente a otra sección, use **No registrar aquí / revisar en su sección** cuando sólo esté comprobando de quién es. Esa acción no crea observaciones ni incidencias. Registre **Otra ubicación** únicamente cuando el bien esté efectivamente presente en la oficina inspeccionada.
+
 No se usa la cámara para leer códigos. La cámara sólo obtiene evidencia fotográfica tipificada y local.
 
 ## Resultados explícitos
@@ -45,5 +47,16 @@ Pulse **¿Puedo salir de esta oficina?**. El servidor es la autoridad y bloquea 
 - combinaciones contradictorias.
 
 Abra cada bloqueador desde el checklist, corríjalo y vuelva a evaluar. Sólo cuando aparezca **LISTA PARA CERRAR**, revise el resumen, marque la confirmación y pulse **Finalizar revisión de esta oficina**.
+
+## Conciliación y entrega a Activo Fijo
+
+En `/reports`, seleccione Dirección, Departamento y Sección y abra **Conciliación**. El documento compara, sin sobrescribir:
+
+- ubicación administrativa según maestro;
+- ubicación observada durante la sesión;
+- resultado físico, incidencias, evidencia y acción propuesta;
+- hallazgos adicionales que no existen en el maestro.
+
+Una propuesta como **regularizar ubicación**, **evaluar baja** o **revisar alta** es una lista de trabajo; no acredita propiedad ni ejecuta un acto administrativo. La pestaña **Regularizaciones** agrupa esas tareas. Use **Exportar CSV para activo fijo** para entregar datos tabulares y **Imprimir / Guardar PDF** para el informe formal. Una sesión abierta se marca claramente como borrador; la versión final corresponde a una sesión cerrada.
 
 Al terminar, revise `/reports`, cree el respaldo de fin de jornada y detenga el servicio mediante `Detener Inventario Terreno.cmd`.

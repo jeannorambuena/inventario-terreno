@@ -135,13 +135,21 @@ Una VPN/WireGuard puede interferir con el acceso a la LAN; no modificar automát
 
 ## Respaldos
 
-SQLite:
+El mecanismo canónico incluye SQLite, evidencias referenciadas y `manifest.json`:
 
 ```powershell
-npm.cmd run backup
+npm.cmd run backup:operational
+npm.cmd run backup:verify
 ```
 
-Cuando existan fotografías, un respaldo operacional completo debe considerar también `evidence/`.
+Para probar recuperación o preparar una copia externa verificada:
+
+```powershell
+npm.cmd run recovery:drill
+npm.cmd run backup:package
+```
+
+`npm.cmd run backup` es **LEGACY / respaldo SQLite simple** y no es el procedimiento principal de recuperación. No copie SQLite y `evidence/` por separado como sustituto del respaldo operacional.
 
 No mezclar certificados con respaldos de inventario.
 

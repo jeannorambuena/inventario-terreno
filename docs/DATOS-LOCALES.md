@@ -4,7 +4,7 @@
 
 - `imports/`: fuentes Excel locales. `imports/ACTIVOS.xlsx` se trata como solo lectura.
 - `data/`: base de operación SQLite. La ruta predeterminada es `data/inventario.sqlite`.
-- `backups/`: copias consistentes creadas con `npm.cmd run backup`.
+- `backups/`: respaldos operacionales creados con `npm.cmd run backup:operational` y paquetes externos ignorados por Git.
 
 Las tres rutas están excluidas de Git y no deben publicarse.
 
@@ -32,10 +32,11 @@ Nunca combine automáticamente dos bases ni reemplace una existente.
 ## Respaldos
 
 ```powershell
-npm.cmd run backup
+npm.cmd run backup:operational
+npm.cmd run backup:verify
 ```
 
-El comando usa la API de respaldo de SQLite para crear una copia coherente en `backups/`. No borra respaldos anteriores. Revise espacio disponible y custodie las copias mediante el procedimiento municipal autorizado.
+El mecanismo canónico crea una SQLite coherente, copia la evidencia referenciada y genera `manifest.json` en `backups/operational/`. No borra respaldos anteriores. `npm.cmd run backup` se conserva sólo como respaldo SQLite simple **LEGACY**. Revise espacio disponible y custodie los paquetes mediante el procedimiento municipal autorizado.
 
 ## Reglas permanentes
 

@@ -37,6 +37,845 @@
           <button id="print-report" type="button" disabled>Imprimir / guardar PDF</button>
         </section>
 
+
+        <nav id="dashboard-bi-nav"
+          class="dashboard-bi-nav no-print"
+          aria-label="Navegaci&oacute;n del dashboard">
+
+          <div class="dashboard-bi-nav__brand">
+            <strong>Control de Inventario</strong>
+            <span>Seguimiento ejecutivo</span>
+          </div>
+
+          <div class="dashboard-bi-nav__links">
+            <a href="#dashboard-control-v2">
+              Resumen
+            </a>
+
+            <a href="#dashboard-priorities">
+              Prioridades
+            </a>
+
+            <a href="#dashboard-explorer">
+              Explorador
+            </a>
+
+            <a href="#incidence-report">
+              Incidencias
+            </a>
+          </div>
+        </nav>
+
+        <section id="dashboard-control-v2"
+          class="dashboard-v2 no-print"
+          aria-labelledby="dashboard-title">
+
+          <div class="dashboard-v2__header">
+            <div>
+              <p class="section-kicker">
+                CONTROL EJECUTIVO
+              </p>
+
+              <h2 id="dashboard-title">
+                Dashboard de Inventario F&iacute;sico
+              </h2>
+
+              <p class="dashboard-v2__intro">
+                Avance consolidado del levantamiento en terreno.
+                Los resultados corresponden al estado vigente
+                registrado en el sistema.
+              </p>
+            </div>
+
+            <div id="dashboard-live"
+              class="dashboard-live"
+              data-state="online">
+
+              <span class="dashboard-live__dot"
+                aria-hidden="true"></span>
+
+              <div>
+                <strong>Sistema en l&iacute;nea</strong>
+                <time id="dashboard-last-sync">
+                  Esperando datos...
+                </time>
+              </div>
+            </div>
+          </div>
+
+          <div id="dashboard-kpis"
+            class="dashboard-kpis"
+            aria-label="Indicadores principales">
+          </div>
+
+          <div class="dashboard-v2__grid">
+
+            <article class="dashboard-panel">
+              <header class="dashboard-panel__header">
+                <div>
+                  <p class="section-kicker">
+                    COBERTURA
+                  </p>
+                  <h3>Avance por direcci&oacute;n</h3>
+                </div>
+
+                <span>
+                  Direcci&oacute;n &rarr; Departamento
+                  &rarr; Secci&oacute;n
+                </span>
+              </header>
+
+              <div id="dashboard-directions"
+                class="dashboard-directions">
+              </div>
+            </article>
+
+            <article class="dashboard-panel">
+              <header class="dashboard-panel__header">
+                <div>
+                  <p class="section-kicker">
+                    ESTADO OPERACIONAL
+                  </p>
+                  <h3>Lectura ejecutiva</h3>
+                </div>
+              </header>
+
+              <div id="dashboard-summary"
+                class="dashboard-summary">
+              </div>
+            </article>
+
+          </div>
+        </section>
+
+
+        <section id="executive-query"
+          class="executive-query no-print"
+          aria-labelledby="executive-query-title">
+
+          <div class="executive-query__header">
+            <div>
+              <p class="section-kicker">
+                CONSULTA EJECUTIVA
+              </p>
+
+              <h2 id="executive-query-title">
+                &iquest;Qu&eacute; avance tiene una unidad?
+              </h2>
+
+              <p>
+                Consulte el estado del inventario por municipio,
+                direcci&oacute;n, departamento o secci&oacute;n.
+              </p>
+            </div>
+
+            <span id="executive-query-cutoff"
+              class="explorer-status">
+              Esperando datos
+            </span>
+          </div>
+
+          <div class="executive-query__filters">
+
+            <label>
+              Nivel
+              <select id="executive-query-level">
+                <option value="municipality">
+                  Municipio completo
+                </option>
+
+                <option value="direction">
+                  Direcci&oacute;n
+                </option>
+
+                <option value="department">
+                  Departamento
+                </option>
+
+                <option value="section">
+                  Secci&oacute;n
+                </option>
+              </select>
+            </label>
+
+            <label id="executive-query-unit-wrap" hidden>
+              Unidad
+              <select id="executive-query-unit">
+                <option value="">
+                  Seleccione&hellip;
+                </option>
+              </select>
+            </label>
+
+          </div>
+
+          <div id="executive-query-result"
+            class="executive-query__result">
+          </div>
+
+          <div class="executive-query__toolbar">
+
+            <button id="executive-query-copy-link"
+              type="button"
+              class="secondary">
+              Copiar enlace
+            </button>
+
+            <button id="executive-query-export"
+              type="button"
+              class="secondary">
+              Exportar consulta CSV
+            </button>
+
+          </div>
+
+          <div id="executive-query-narrative"
+            class="executive-query-narrative">
+          </div>
+
+          <div class="executive-query__lower">
+
+            <article class="executive-query-card">
+              <header>
+                <p class="section-kicker">
+                  INTERPRETACI&Oacute;N
+                </p>
+                <h3>Indicadores de gesti&oacute;n</h3>
+              </header>
+
+              <div id="executive-query-indicators"
+                class="executive-indicators">
+              </div>
+            </article>
+
+            <article class="executive-query-card">
+              <header>
+                <p class="section-kicker">
+                  COMPARACI&Oacute;N
+                </p>
+                <h3 id="executive-query-ranking-title">
+                  Unidades dependientes
+                </h3>
+              </header>
+
+              <div id="executive-query-ranking"
+                class="executive-query-ranking">
+              </div>
+            </article>
+
+          </div>
+        </section>
+
+        <section id="traceability-search"
+          class="traceability-search no-print"
+          aria-labelledby="traceability-search-title">
+
+          <div class="traceability-search__heading">
+            <div>
+              <p class="section-kicker">
+                TRAZABILIDAD
+              </p>
+
+              <h2 id="traceability-search-title">
+                Buscar historial de un bien
+              </h2>
+
+              <p>
+                Busque por c&oacute;digo patrimonial,
+                c&oacute;digo provisional, esc&aacute;ner
+                o nombre del bien.
+              </p>
+            </div>
+          </div>
+
+          <div class="traceability-search__controls">
+            <input id="trace-search-input"
+              type="search"
+              autocomplete="off"
+              placeholder="Ej.: 01-06-00067 o PROV-S1-0003">
+
+            <button id="trace-search-button"
+              type="button">
+              Buscar trazabilidad
+            </button>
+          </div>
+
+          <div id="trace-search-results"
+            class="trace-search-results">
+          </div>
+
+          <section id="trace-search-detail"
+            class="trace-search-detail"
+            hidden>
+
+            <div class="trace-search-detail__heading">
+              <div>
+                <p class="section-kicker">
+                  EXPEDIENTE DE AUDITOR&Iacute;A
+                </p>
+
+                <h3 id="trace-search-detail-title">
+                  Historial
+                </h3>
+              </div>
+            </div>
+
+            <div id="trace-search-timeline"
+              class="audit-timeline">
+            </div>
+
+          </section>
+
+        </section>
+
+        <section id="dashboard-priorities"
+          class="dashboard-priorities no-print"
+          aria-labelledby="dashboard-priorities-title">
+
+          <div class="dashboard-priorities__header">
+            <div>
+              <p class="section-kicker">
+                GESTI&Oacute;N DEL OPERATIVO
+              </p>
+
+              <h2 id="dashboard-priorities-title">
+                Estado y prioridades por dependencia
+              </h2>
+
+              <p>
+                Identifica secciones iniciadas que requieren
+                atenci&oacute;n por incidencias, hallazgos o pendientes.
+              </p>
+            </div>
+          </div>
+
+          <div id="dashboard-unit-status"
+            class="dashboard-unit-status">
+          </div>
+
+          <article class="dashboard-priority-panel">
+
+            <div class="dashboard-priority-panel__heading">
+              <div>
+                <p class="section-kicker">
+                  PRIORIZACI&Oacute;N OPERACIONAL
+                </p>
+
+                <h3>
+                  Secciones que requieren atenci&oacute;n
+                </h3>
+              </div>
+
+              <span>
+                La prioridad no constituye calificaci&oacute;n
+                administrativa ni jur&iacute;dica.
+              </span>
+            </div>
+
+            <div id="dashboard-priority-list"
+              class="dashboard-priority-list">
+            </div>
+
+          </article>
+        </section>
+
+        <section id="dashboard-explorer"
+          class="dashboard-explorer no-print"
+          aria-labelledby="explorer-title">
+
+          <div class="dashboard-explorer__header">
+            <div>
+              <p class="section-kicker">EXPLORADOR DEL INVENTARIO</p>
+              <h2 id="explorer-title">
+                Direcci&oacute;n &rarr; Departamento &rarr; Secci&oacute;n
+              </h2>
+              <p>
+                Consulte el avance y la realidad f&iacute;sica registrada
+                en cada dependencia.
+              </p>
+            </div>
+
+            <button id="export-section-csv"
+              type="button"
+              class="secondary"
+              disabled>
+              Exportar planilla CSV
+            </button>
+
+            <button id="print-physical-view"
+              type="button"
+              class="secondary"
+              disabled>
+              Imprimir vista f&iacute;sica
+            </button>
+
+            <button id="open-audit-package"
+              type="button"
+              class="secondary"
+              disabled>
+              Expediente de auditor&iacute;a
+            </button>
+
+            <button id="dashboard-presentation-mode"
+              type="button"
+              class="secondary dashboard-presentation-button"
+              aria-pressed="false">
+              Presentar avance
+            </button>
+
+            <span id="explorer-status"
+              class="explorer-status">
+              Seleccione una secci&oacute;n
+            </span>
+          </div>
+
+          <div class="explorer-filters">
+            <label>
+              Direcci&oacute;n
+              <select id="explorer-direction">
+                <option value="">Seleccione&hellip;</option>
+              </select>
+            </label>
+
+            <label>
+              Departamento
+              <select id="explorer-department" disabled>
+                <option value="">Seleccione&hellip;</option>
+              </select>
+            </label>
+
+            <label>
+              Secci&oacute;n / Oficina
+              <select id="explorer-section" disabled>
+                <option value="">Seleccione&hellip;</option>
+              </select>
+            </label>
+          </div>
+
+          <div id="explorer-empty"
+            class="explorer-empty">
+            Seleccione una direcci&oacute;n, departamento y secci&oacute;n
+            para revisar su estado.
+          </div>
+
+          <div id="explorer-content" hidden>
+
+            <div id="explorer-breadcrumb"
+              class="explorer-breadcrumb"></div>
+
+            <div id="explorer-metrics"
+              class="dashboard-kpis dashboard-kpis--section">
+            </div>
+
+            <div id="explorer-analytics"
+              class="explorer-analytics">
+
+              <article class="explorer-analytics-card">
+                <header>
+                  <div>
+                    <p class="section-kicker">
+                      RESULTADOS
+                    </p>
+                    <h3>Estado de registros</h3>
+                  </div>
+                </header>
+
+                <div class="explorer-outcome">
+                  <div id="explorer-donut"
+                    class="explorer-donut"
+                    aria-label="Distribucion de registros">
+
+                    <div class="explorer-donut__center">
+                      <strong id="explorer-donut-total">0</strong>
+                      <span>registros</span>
+                    </div>
+                  </div>
+
+                  <div id="explorer-outcome-legend"
+                    class="explorer-outcome-legend">
+                  </div>
+                </div>
+              </article>
+
+              <article class="explorer-analytics-card">
+                <header>
+                  <div>
+                    <p class="section-kicker">
+                      ACTIVIDAD
+                    </p>
+                    <h3>Ultimos registros</h3>
+                  </div>
+                </header>
+
+                <div id="explorer-recent"
+                  class="explorer-recent">
+                </div>
+              </article>
+
+            </div>
+
+            <div class="explorer-control-grid">
+
+              <article class="explorer-analytics-card">
+                <header>
+                  <div>
+                    <p class="section-kicker">
+                      INCIDENCIAS
+                    </p>
+                    <h3>Caracter&iacute;sticas detectadas</h3>
+                  </div>
+                </header>
+
+                <div id="explorer-incidence-matrix"
+                  class="explorer-incidence-matrix">
+                </div>
+              </article>
+
+              <article class="explorer-analytics-card">
+                <header>
+                  <div>
+                    <p class="section-kicker">
+                      TRAZABILIDAD
+                    </p>
+                    <h3>Estado documental</h3>
+                  </div>
+                </header>
+
+                <div id="explorer-integrity-summary"
+                  class="explorer-integrity-summary">
+                </div>
+              </article>
+
+            </div>
+
+            <nav class="explorer-tabs"
+              aria-label="Contenido de la secci&oacute;n">
+              <button type="button"
+                data-explorer-tab="expected"
+                aria-pressed="true">
+                Bienes esperados
+              </button>
+
+              <button type="button"
+                data-explorer-tab="findings"
+                aria-pressed="false">
+                Hallazgos adicionales
+              </button>
+
+              <button type="button"
+                data-explorer-tab="evidence"
+                aria-pressed="false">
+                Evidencias
+              </button>
+
+              <button type="button"
+                data-explorer-tab="physical"
+                aria-pressed="false">
+                Vista f&iacute;sica
+              </button>
+
+              <button type="button"
+                data-explorer-tab="summary"
+                aria-pressed="false">
+                Resumen ejecutivo
+              </button>
+
+              <button type="button"
+                data-explorer-tab="audit"
+                aria-pressed="false">
+                Auditor&iacute;a
+              </button>
+
+              <button type="button"
+                data-explorer-tab="dossier"
+                aria-pressed="false">
+                Expediente
+              </button>
+
+              <button type="button"
+                data-explorer-tab="reconciliation"
+                aria-pressed="false">
+                Conciliaci&oacute;n
+              </button>
+
+              <button type="button"
+                data-explorer-tab="regularizations"
+                aria-pressed="false">
+                Regularizaciones
+              </button>
+            </nav>
+
+            <section id="explorer-panel-expected"
+              class="explorer-panel"
+              data-explorer-panel="expected">
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Bienes esperados seg&uacute;n maestro</h3>
+                  <p>
+                    Bienes que el inventario maestro asigna a esta
+                    dependencia.
+                  </p>
+                </div>
+                <span id="explorer-expected-count"
+                  class="count-badge">0</span>
+              </div>
+
+              <div class="explorer-toolbar">
+                <label class="explorer-search">
+                  <span>Buscar en esta seccion</span>
+                  <input id="explorer-search"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Codigo, nombre, marca o estado">
+                </label>
+
+                <span id="explorer-assets-shown"
+                  class="explorer-assets-shown">
+                </span>
+              </div>
+
+              <div id="explorer-assets"
+                class="explorer-table"></div>
+            </section>
+
+            <section id="explorer-panel-findings"
+              class="explorer-panel"
+              data-explorer-panel="findings"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Hallazgos f&iacute;sicos adicionales</h3>
+                  <p>
+                    Objetos encontrados que no corresponden a un bien
+                    esperado del maestro en esta secci&oacute;n.
+                  </p>
+                </div>
+                <span id="explorer-findings-count"
+                  class="count-badge">0</span>
+              </div>
+
+              <div id="explorer-findings"
+                class="explorer-findings"></div>
+            </section>
+
+            <section id="explorer-panel-evidence"
+              class="explorer-panel"
+              data-explorer-panel="evidence"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Evidencia fotogr&aacute;fica</h3>
+                  <p>
+                    Fotograf&iacute;as vigentes asociadas a los registros
+                    de terreno.
+                  </p>
+                </div>
+                <span id="explorer-evidence-count"
+                  class="count-badge">0</span>
+              </div>
+
+              <div id="explorer-evidence"
+                class="explorer-evidence"></div>
+            </section>
+
+            <section id="explorer-panel-physical"
+              class="explorer-panel"
+              data-explorer-panel="physical"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Vista f&iacute;sica de la dependencia</h3>
+                  <p>
+                    Cat&aacute;logo visual que combina maestro,
+                    levantamiento vigente y evidencia disponible.
+                  </p>
+                </div>
+
+                <span id="explorer-physical-count"
+                  class="count-badge">0</span>
+              </div>
+
+              <div id="explorer-physical"
+                class="explorer-physical-grid">
+              </div>
+
+            </section>
+
+            <section id="explorer-panel-audit"
+              class="explorer-panel"
+              data-explorer-panel="audit"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Auditor&iacute;a y trazabilidad</h3>
+                  <p>
+                    Historial cronol&oacute;gico de acciones,
+                    correcciones, anulaciones y evidencias.
+                  </p>
+                </div>
+
+                <span id="explorer-audit-count"
+                  class="count-badge">0</span>
+              </div>
+
+              <div class="audit-toolbar">
+
+                <label>
+                  Tipo de evento
+
+                  <select id="explorer-audit-filter">
+                    <option value="all">
+                      Todos
+                    </option>
+
+                    <option value="observation">
+                      Registros
+                    </option>
+
+                    <option value="correction">
+                      Correcciones / anulaciones
+                    </option>
+
+                    <option value="evidence">
+                      Evidencias
+                    </option>
+
+                    <option value="session">
+                      Sesi&oacute;n / acceso
+                    </option>
+                  </select>
+                </label>
+
+                <label>
+                  Buscar en historial
+
+                  <input id="explorer-audit-search"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="C&oacute;digo, acci&oacute;n, operador o dispositivo">
+                </label>
+
+              </div>
+
+              <div id="explorer-audit"
+                class="audit-timeline">
+              </div>
+
+            </section>
+
+            <section id="explorer-panel-dossier"
+              class="explorer-panel audit-package-panel"
+              data-explorer-panel="dossier"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>
+                    Expediente de auditor&iacute;a
+                  </h3>
+
+                  <p>
+                    Acta t&eacute;cnica del levantamiento,
+                    trazabilidad e integridad documental.
+                  </p>
+                </div>
+
+                <div class="audit-package-actions no-print">
+                  <button id="download-audit-manifest"
+                    type="button"
+                    class="secondary"
+                    disabled>
+                    Descargar manifiesto JSON
+                  </button>
+
+                  <button id="export-audit-csv"
+                    type="button"
+                    class="secondary"
+                    disabled>
+                    Exportar auditor&iacute;a CSV
+                  </button>
+
+                  <button id="print-audit-package"
+                    type="button"
+                    class="secondary"
+                    disabled>
+                    Imprimir / Guardar PDF
+                  </button>
+                </div>
+              </div>
+
+              <article id="audit-package-sheet"
+                class="audit-package-sheet">
+              </article>
+
+            </section>
+
+            <section id="explorer-panel-summary"
+              class="explorer-panel explorer-section-summary"
+              data-explorer-panel="summary"
+              hidden>
+
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Resumen ejecutivo de la secci&oacute;n</h3>
+                  <p>
+                    Vista preparada para revisi&oacute;n de jefatura
+                    y presentaci&oacute;n.
+                  </p>
+                </div>
+
+                <button id="print-section-summary"
+                  type="button"
+                  class="secondary">
+                  Imprimir esta secci&oacute;n
+                </button>
+              </div>
+
+              <article id="explorer-summary-sheet"
+                class="explorer-summary-sheet">
+              </article>
+
+            </section>
+
+            <section id="explorer-panel-reconciliation"
+              class="explorer-panel"
+              data-explorer-panel="reconciliation"
+              hidden>
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Informe de conciliaci&oacute;n de inventario f&iacute;sico</h3>
+                  <p>Estado seg&uacute;n maestro versus realidad observada. Las acciones son propuestas de trabajo, no actos administrativos.</p>
+                </div>
+                <div class="reconciliation-actions no-print">
+                  <button id="export-reconciliation-csv" type="button" class="secondary" disabled>Exportar CSV para activo fijo</button>
+                  <button id="print-reconciliation" type="button" class="secondary" disabled>Imprimir / Guardar PDF</button>
+                </div>
+              </div>
+              <article id="reconciliation-sheet" class="reconciliation-sheet"></article>
+            </section>
+
+            <section id="explorer-panel-regularizations"
+              class="explorer-panel"
+              data-explorer-panel="regularizations"
+              hidden>
+              <div class="explorer-panel__heading">
+                <div>
+                  <h3>Regularizaciones pendientes</h3>
+                  <p>Lista de trabajo para el Encargado de Inventario. No modifica la plataforma oficial de activo fijo.</p>
+                </div>
+                <span id="regularizations-count" class="count-badge">0</span>
+              </div>
+              <div id="regularizations-worklist" class="regularizations-worklist"></div>
+            </section>
+
+          </div>
+        </section>
+
         <section class="report-section" aria-labelledby="overview-title">
           <div class="report-heading">
             <div>
@@ -132,6 +971,35 @@
         <p id="report-message" class="app-alert" role="status" aria-live="polite"></p>
       </main>
     </div>
+
+    <dialog id="asset-dialog"
+      aria-labelledby="asset-dialog-title">
+
+      <article class="report-dialog asset-dossier">
+
+        <div class="report-heading">
+          <div>
+            <p id="asset-dialog-subtitle"
+              class="section-kicker">
+              FICHA DEL BIEN
+            </p>
+
+            <h2 id="asset-dialog-title">
+              Detalle del bien
+            </h2>
+          </div>
+
+          <button id="close-asset-dialog"
+            type="button"
+            class="secondary">
+            Cerrar
+          </button>
+        </div>
+
+        <div id="asset-dialog-content"></div>
+
+      </article>
+    </dialog>
 
     <dialog id="incidence-dialog" aria-labelledby="incidence-dialog-title">
       <article class="report-dialog">

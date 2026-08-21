@@ -1,3 +1,13 @@
+import {
+  buildConsultationRows,
+  consultationLocationLabel,
+  consultationSectionState,
+  createConsultationState,
+  filterConsultationRows,
+  findOverviewSection,
+  flattenOverviewSections,
+} from './inventory-consultation.js';
+
 const elements = {
   connection: document.querySelector('#connection-status'),
   direction: document.querySelector('#direction'),
@@ -38,6 +48,8 @@ const elements = {
   lastCode: document.querySelector('#last-code'),
   lastName: document.querySelector('#last-name'),
   lastResult: document.querySelector('#last-result'),
+  lastMasterLocation: document.querySelector('#last-master-location'),
+  skipOtherLocation: document.querySelector('#skip-other-location'),
   undoLast: document.querySelector('#undo-last'),
   undoDialog: document.querySelector('#undo-dialog'),
   undoForm: document.querySelector('#undo-form'),
@@ -70,6 +82,24 @@ const elements = {
   cancelReason: document.querySelector('#cancel-reason'),
   cancelConfirm: document.querySelector('#cancel-confirm'),
   dismissCancel: document.querySelector('#dismiss-cancel'),
+  openInventoryConsultation: document.querySelector('#open-inventory-consultation'),
+  consultationDialog: document.querySelector('#inventory-consultation-dialog'),
+  closeInventoryConsultation: document.querySelector('#close-inventory-consultation'),
+  consultationActiveLocation: document.querySelector('#consultation-active-location'),
+  consultationDirection: document.querySelector('#consultation-direction'),
+  consultationDepartment: document.querySelector('#consultation-department'),
+  consultationSection: document.querySelector('#consultation-section'),
+  consultationSearchForm: document.querySelector('#consultation-search-form'),
+  consultationSearch: document.querySelector('#consultation-search'),
+  consultationLocation: document.querySelector('#consultation-location'),
+  consultationSectionState: document.querySelector('#consultation-section-state'),
+  consultationExpected: document.querySelector('#consultation-expected'),
+  consultationReviewed: document.querySelector('#consultation-reviewed'),
+  consultationPending: document.querySelector('#consultation-pending'),
+  consultationIncidents: document.querySelector('#consultation-incidents'),
+  consultationMessage: document.querySelector('#consultation-message'),
+  consultationResults: document.querySelector('#consultation-results'),
+  consultationFilters: [...document.querySelectorAll('[data-consultation-filter]')],
   message: document.querySelector('#message'),
 };
 
@@ -97,6 +127,9 @@ const state = {
   pendingSignature: '',
   recordsSignature: '',
 };
+
+// Este estado no comparte campos ni referencias mutables con la sesión operativa.
+const consultation = createConsultationState();
 
 const sessionStorageKey = 'inventario-terreno.sessionId';
 const deviceStorageKey = 'inventario-terreno.deviceId';
@@ -205,6 +238,11 @@ function resultLabel(status) {
   })[status] || 'Observación registrada';
 }
 
+function masterLocationText(asset) {
+  return [asset?.direction ?? asset?.masterDirection, asset?.department ?? asset?.masterDepartment,
+    asset?.section ?? asset?.masterSection].filter(Boolean).join(' → ');
+}
+
 function renderLastRecord(observation, canUndo = false) {
   state.lastObservation = observation;
   if (!observation) {
@@ -216,6 +254,10 @@ function renderLastRecord(observation, canUndo = false) {
   elements.lastCode.textContent = code || '—';
   elements.lastName.textContent = name || 'Bien sin descripción';
   elements.lastResult.textContent = resultLabel(status);
+  const masterLocation = masterLocationText(observation);
+  elements.lastMasterLocation.textContent = masterLocation
+    ? `Ubicación según maestro: ${masterLocation}`
+    : '';
   elements.undoLast.hidden = !canUndo || !observation.observationCode;
   elements.lastRecord.hidden = false;
 }
@@ -286,6 +328,7 @@ function resetEntryFlow() {
   elements.evidenceStatus.textContent = '';
   elements.evidenceQueue.replaceChildren();
   elements.assetResult.hidden = true;
+  elements.skipOtherLocation.hidden = true;
   elements.observationForm.hidden = true;
   state.asset = null;
   state.provisionalCode = null;
@@ -412,6 +455,228 @@ async function loadLocations() {
   const { locations } = await api('/api/locations');
   state.locations = locations;
   setOptions(elements.direction, distinct(locations.map(({ direction }) => direction)));
+}
+
+function setConsultationOptions(select, values, placeholder) {
+  select.replaceChildren(new Option(placeholder, ''));
+  for (const { value, label } of values) select.add(new Option(label || 'Sin especificar', value));
+  select.disabled = values.length === 0;
+}
+
+function consultationLocationById(locationId) {
+  return consultation.locations.find(({ id }) => Number(id) === Number(locationId)) ?? null;
+}
+
+function renderConsultationMetrics(section = null) {
+  if (section) {
+    elements.consultationExpected.textContent = String(section.bienesEsperados ?? 0);
+    elements.consultationReviewed.textContent = String(section.bienesEsperadosRevisados ?? 0);
+    elements.consultationPending.textContent = String(section.pendientes ?? 0);
+    elements.consultationIncidents.textContent = String(section.incidencias ?? 0);
+    return;
+  }
+  const reviewed = consultation.rows.filter(({ consultationStatus }) => consultationStatus !== 'pending').length;
+  const incidents = consultation.rows.filter(({ consultationStatus }) => !['pending', 'conforming'].includes(consultationStatus)).length;
+  elements.consultationExpected.textContent = String(consultation.rows.length);
+  elements.consultationReviewed.textContent = String(reviewed);
+  elements.consultationPending.textContent = String(consultation.rows.length - reviewed);
+  elements.consultationIncidents.textContent = String(incidents);
+}
+
+function renderConsultationRows() {
+  const rows = filterConsultationRows(consultation.rows, {
+    query: consultation.query,
+    filter: consultation.filter,
+  });
+  elements.consultationResults.replaceChildren();
+  if (rows.length === 0) {
+    const row = document.createElement('tr');
+    const cell = document.createElement('td');
+    cell.colSpan = 5;
+    cell.className = 'consultation-empty';
+    cell.textContent = consultation.loading ? 'Cargando consulta…' : 'No hay bienes que coincidan con la consulta.';
+    row.append(cell);
+    elements.consultationResults.append(row);
+  } else {
+    for (const item of rows) {
+      const row = document.createElement('tr');
+      const values = [
+        item.assetCode || '—',
+        item.name || item.description || 'Sin descripción',
+        [item.serialNumber, item.scannerCode].filter(Boolean).join(' / ') || '—',
+        consultationLocationLabel(item),
+      ];
+      for (const value of values) {
+        const cell = document.createElement('td');
+        cell.textContent = value;
+        row.append(cell);
+      }
+      const statusCell = document.createElement('td');
+      const status = document.createElement('span');
+      status.className = `consultation-status consultation-status--${item.consultationStatus}`;
+      status.textContent = item.consultationStatusLabel;
+      statusCell.append(status);
+      row.append(statusCell);
+      elements.consultationResults.append(row);
+    }
+  }
+  elements.consultationMessage.textContent = `${rows.length} bien(es) visibles de ${consultation.rows.length}.`;
+}
+
+function setConsultationFilter(filter) {
+  consultation.filter = filter;
+  for (const button of elements.consultationFilters) {
+    button.setAttribute('aria-pressed', String(button.dataset.consultationFilter === filter));
+  }
+  renderConsultationRows();
+}
+
+function resetConsultationResults() {
+  consultation.locationId = null;
+  consultation.assets = [];
+  consultation.observations = [];
+  consultation.rows = [];
+  consultation.query = '';
+  consultation.filter = 'all';
+  elements.consultationSearch.value = '';
+  elements.consultationLocation.textContent = 'Seleccione una sección o realice una búsqueda global';
+  elements.consultationSectionState.textContent = 'Sin selección';
+  renderConsultationMetrics();
+  setConsultationFilter('all');
+}
+
+function populateConsultationDirections() {
+  const directions = distinct(consultation.locations.map(({ direction }) => direction));
+  setConsultationOptions(elements.consultationDirection,
+    directions.map((value) => ({ value, label: value })), 'Todas / seleccione…');
+  setConsultationOptions(elements.consultationDepartment, [], 'Seleccione…');
+  setConsultationOptions(elements.consultationSection, [], 'Seleccione…');
+}
+
+async function loadConsultationSection(locationId) {
+  consultation.loading = true;
+  consultation.locationId = Number(locationId);
+  consultation.query = '';
+  elements.consultationSearch.value = '';
+  renderConsultationRows();
+  try {
+    const section = findOverviewSection(consultation.overview, consultation.locationId);
+    const [{ assets }, observationResponse] = await Promise.all([
+      api(`/api/assets?locationId=${consultation.locationId}`),
+      section?.sessionId ? api(`/api/sessions/${section.sessionId}/observations`) : Promise.resolve({ observations: [] }),
+    ]);
+    consultation.assets = assets;
+    consultation.observations = observationResponse.observations;
+    consultation.rows = buildConsultationRows(assets, consultation.observations, section);
+    elements.consultationLocation.textContent = consultationLocationLabel(consultationLocationById(consultation.locationId));
+    elements.consultationSectionState.textContent = consultationSectionState(section?.state);
+    renderConsultationMetrics(section);
+  } catch (error) {
+    consultation.rows = [];
+    elements.consultationMessage.textContent = error.message;
+  } finally {
+    consultation.loading = false;
+    renderConsultationRows();
+  }
+}
+
+async function searchConsultationGlobally(query) {
+  consultation.loading = true;
+  consultation.locationId = null;
+  consultation.query = '';
+  renderConsultationRows();
+  try {
+    const { assets } = await api(`/api/assets/search?q=${encodeURIComponent(query)}`);
+    const sections = new Map(flattenOverviewSections(consultation.overview)
+      .map((section) => [Number(section.locationId), section]));
+    const sessionIds = [...new Set(assets
+      .map((asset) => sections.get(Number(asset.locationId))?.sessionId)
+      .filter(Boolean))];
+    const observationEntries = await Promise.all(sessionIds.map(async (sessionId) => {
+      const { observations } = await api(`/api/sessions/${sessionId}/observations`);
+      return [sessionId, observations];
+    }));
+    const observationsBySession = new Map(observationEntries);
+    consultation.rows = assets.map((asset) => {
+      const section = sections.get(Number(asset.locationId));
+      return buildConsultationRows([asset], observationsBySession.get(section?.sessionId) ?? [], section)[0];
+    });
+    elements.consultationLocation.textContent = `Resultados globales para “${query}”`;
+    elements.consultationSectionState.textContent = 'Varias secciones';
+    renderConsultationMetrics();
+  } catch (error) {
+    consultation.rows = [];
+    elements.consultationMessage.textContent = error.message;
+  } finally {
+    consultation.loading = false;
+    renderConsultationRows();
+  }
+}
+
+async function openInventoryConsultation() {
+  const activeLocation = state.sessionId
+    ? state.locations.find(({ id }) => Number(id) === Number(state.locationId))
+    : null;
+  elements.consultationActiveLocation.textContent = activeLocation
+    ? consultationLocationLabel(activeLocation)
+    : 'Sin sesión activa';
+  if (typeof elements.consultationDialog.showModal === 'function') elements.consultationDialog.showModal();
+  else elements.consultationDialog.setAttribute('open', '');
+  resetConsultationResults();
+  elements.consultationMessage.textContent = 'Cargando ubicaciones…';
+  try {
+    const [{ locations }, { overview }] = await Promise.all([
+      api('/api/locations'),
+      api('/api/reports/overview'),
+    ]);
+    consultation.locations = locations;
+    consultation.overview = overview;
+    populateConsultationDirections();
+    elements.consultationMessage.textContent = 'Seleccione una sección o busque en todo el inventario.';
+  } catch (error) {
+    elements.consultationMessage.textContent = error.message;
+  }
+}
+
+elements.openInventoryConsultation.addEventListener('click', () => { void openInventoryConsultation(); });
+elements.closeInventoryConsultation.addEventListener('click', () => elements.consultationDialog.close());
+elements.consultationDirection.addEventListener('change', () => {
+  const direction = elements.consultationDirection.value;
+  const departments = distinct(consultation.locations
+    .filter((location) => location.direction === direction)
+    .map(({ department }) => department));
+  setConsultationOptions(elements.consultationDepartment,
+    departments.map((value) => ({ value, label: value })), 'Seleccione…');
+  setConsultationOptions(elements.consultationSection, [], 'Seleccione…');
+  resetConsultationResults();
+});
+elements.consultationDepartment.addEventListener('change', () => {
+  const direction = elements.consultationDirection.value;
+  const department = elements.consultationDepartment.value;
+  const locations = consultation.locations.filter((location) => (
+    location.direction === direction && location.department === department
+  ));
+  setConsultationOptions(elements.consultationSection,
+    locations.map(({ id, section }) => ({ value: String(id), label: section || 'Sin especificar' })), 'Seleccione…');
+  resetConsultationResults();
+});
+elements.consultationSection.addEventListener('change', () => {
+  if (elements.consultationSection.value) void loadConsultationSection(elements.consultationSection.value);
+  else resetConsultationResults();
+});
+elements.consultationSearchForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const query = elements.consultationSearch.value.trim();
+  if (consultation.locationId) {
+    consultation.query = query;
+    renderConsultationRows();
+    return;
+  }
+  if (query) void searchConsultationGlobally(query);
+  else elements.consultationMessage.textContent = 'Ingrese un texto o seleccione una sección.';
+});
+for (const button of elements.consultationFilters) {
+  button.addEventListener('click', () => setConsultationFilter(button.dataset.consultationFilter));
 }
 
 async function createPairing() {
@@ -683,9 +948,13 @@ function showAsset(asset, provisionalCode) {
     appendDetail(elements.assetDetails, 'Marca', asset.brand);
     appendDetail(elements.assetDetails, 'Modelo', asset.model);
     appendDetail(elements.assetDetails, 'Serie', asset.serialNumber);
+    appendDetail(elements.assetDetails, 'UBICACIÓN SEGÚN MAESTRO', masterLocationText(asset));
     if (asset.locationId === state.locationId) {
+      appendDetail(elements.assetDetails, 'Asignación', '✓ Corresponde a esta sección');
       elements.observationStatus.value = 'dato_distinto';
     } else {
+      appendDetail(elements.assetDetails, 'Asignación', '⚠ Asignado según maestro a otra dependencia');
+      elements.skipOtherLocation.hidden = false;
       elements.observationStatus.value = 'otra_ubicacion';
       const otherLocation = elements.observationForm.querySelector('input[name="situation"][value="otra_ubicacion"]');
       otherLocation.checked = true;
@@ -704,6 +973,12 @@ function showAsset(asset, provisionalCode) {
   setIncidenceMode(true);
 }
 
+elements.skipOtherLocation.addEventListener('click', () => {
+  const location = masterLocationText(state.asset);
+  resetEntryFlow();
+  setMessage(`No se creó una observación. Revise este bien en su sección administrativa${location ? `: ${location}` : '.'}`);
+});
+
 async function handleResolvedAsset(asset, code) {
   if (asset.locationId === state.locationId && !state.incidenceMode) {
     await registerObservation({ asset, status: 'verificado', lookupCode: code });
@@ -712,7 +987,7 @@ async function handleResolvedAsset(asset, code) {
   showAsset(asset, null);
   setMessage(asset.locationId === state.locationId
     ? 'Complete la incidencia antes de registrar.'
-    : 'El bien pertenece a otra ubicación. Registre la incidencia.');
+    : 'El maestro lo asigna a otra sección. Si está físicamente aquí, registre Otra ubicación; si sólo está comprobando, use No registrar aquí.');
   elements.observationForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 

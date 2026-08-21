@@ -21,6 +21,7 @@
             </div>
           </div>
           <div class="app-bar-actions">
+            <button id="open-inventory-consultation" class="app-bar-button" type="button">Consultar inventario</button>
             <a class="app-bar-link" href="/reports">Informes y avance</a>
             <span class="status-chip status-chip--service">
               <svg class="icon" aria-hidden="true"><use href="/icons.svg#connected"></use></svg>
@@ -146,6 +147,7 @@
                     <strong id="last-code"></strong>
                     <span id="last-name"></span>
                     <em id="last-result"></em>
+                    <small id="last-master-location" class="master-location-line"></small>
                   </div>
                   <button id="undo-last" type="button" class="secondary secondary--warning" hidden>
                     <svg class="icon" aria-hidden="true"><use href="/icons.svg#refresh"></use></svg>
@@ -165,6 +167,9 @@
                   </div>
                 </div>
                 <dl id="asset-details" class="detail-grid"></dl>
+                <button id="skip-other-location" type="button" class="secondary master-location-skip" hidden>
+                  No registrar aquí / revisar en su sección
+                </button>
               </article>
 
               <form id="observation-form" class="observation-form operation-card" hidden>
@@ -499,6 +504,81 @@
           </button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="inventory-consultation-dialog" class="consultation-dialog" aria-labelledby="inventory-consultation-title">
+      <section class="consultation-shell">
+        <header class="consultation-header">
+          <div>
+            <p class="section-kicker">Consulta independiente</p>
+            <h2 id="inventory-consultation-title">Consultar inventario</h2>
+            <p>Explore ubicaciones y bienes sin interrumpir la revisión en curso.</p>
+          </div>
+          <button id="close-inventory-consultation" class="secondary consultation-close" type="button" aria-label="Cerrar consulta">Cerrar</button>
+        </header>
+
+        <div class="consultation-readonly" role="note">
+          <strong>SOLO LECTURA</strong>
+          <span>Esta consulta no registra observaciones ni modifica el inventario.</span>
+        </div>
+
+        <div class="consultation-context">
+          <span>Sesión operativa actual</span>
+          <strong id="consultation-active-location">Sin sesión activa</strong>
+        </div>
+
+        <section class="consultation-controls" aria-label="Ubicación consultada">
+          <div class="consultation-hierarchy">
+            <label>Dirección
+              <select id="consultation-direction"><option value="">Todas / seleccione…</option></select>
+            </label>
+            <label>Departamento
+              <select id="consultation-department" disabled><option value="">Seleccione…</option></select>
+            </label>
+            <label>Sección
+              <select id="consultation-section" disabled><option value="">Seleccione…</option></select>
+            </label>
+          </div>
+          <form id="consultation-search-form" class="consultation-search">
+            <label for="consultation-search">Buscar código, escáner, nombre, descripción o serie</label>
+            <div>
+              <input id="consultation-search" type="search" autocomplete="off" placeholder="Buscar en la sección o en todo el maestro">
+              <button type="submit">Buscar</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="consultation-summary" aria-live="polite">
+          <div class="consultation-title-row">
+            <div>
+              <span>Ubicación consultada</span>
+              <strong id="consultation-location">Seleccione una sección o realice una búsqueda global</strong>
+            </div>
+            <span id="consultation-section-state" class="consultation-state">Sin selección</span>
+          </div>
+          <div class="consultation-metrics">
+            <article><span>Esperados</span><strong id="consultation-expected">0</strong></article>
+            <article><span>Revisados</span><strong id="consultation-reviewed">0</strong></article>
+            <article><span>Pendientes</span><strong id="consultation-pending">0</strong></article>
+            <article><span>Incidencias</span><strong id="consultation-incidents">0</strong></article>
+          </div>
+        </section>
+
+        <div class="consultation-filter-bar" aria-label="Filtrar bienes">
+          <button type="button" class="secondary" data-consultation-filter="all" aria-pressed="true">Todos</button>
+          <button type="button" class="secondary" data-consultation-filter="pending" aria-pressed="false">Pendientes</button>
+          <button type="button" class="secondary" data-consultation-filter="reviewed" aria-pressed="false">Revisados</button>
+          <button type="button" class="secondary" data-consultation-filter="incidents" aria-pressed="false">Con incidencias</button>
+        </div>
+
+        <p id="consultation-message" class="consultation-message" role="status"></p>
+        <div class="consultation-table-wrap">
+          <table class="consultation-table">
+            <thead><tr><th>Código</th><th>Bien</th><th>Serie / escáner</th><th>Ubicación maestra</th><th>Estado</th></tr></thead>
+            <tbody id="consultation-results"></tbody>
+          </table>
+        </div>
+      </section>
     </dialog>
 
     <script type="module" src="/app.js"></script>

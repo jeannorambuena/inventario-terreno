@@ -1,4 +1,8 @@
 import {
+  getFieldEvidencePolicy,
+  validateFieldRequirements,
+} from './field-rules.js';
+import {
   createMobileDeviceSuffix,
   createPollingFailureTracker,
   createSafeNetworkError,
@@ -28,17 +32,22 @@ const elements = {
   lastCode: document.querySelector('#last-code'),
   lastName: document.querySelector('#last-name'),
   lastResult: document.querySelector('#last-result'),
+  lastMasterLocation: document.querySelector('#last-master-location'),
   resultCard: document.querySelector('#result-card'),
   classification: document.querySelector('#classification'),
   assetName: document.querySelector('#asset-name'),
   assetDetails: document.querySelector('#asset-details'),
   matchChoices: document.querySelector('#match-choices'),
+  skipOtherLocation: document.querySelector('#skip-other-location'),
   observationForm: document.querySelector('#observation-form'),
   status: document.querySelector('#status'),
   addEvidence: document.querySelector('#add-evidence'),
   evidenceFile: document.querySelector('#evidence-file'),
   evidenceStatus: document.querySelector('#evidence-status'),
   evidenceQueue: document.querySelector('#mobile-evidence-queue'),
+  readiness: document.querySelector('#mobile-readiness'),
+  readinessTitle: document.querySelector('#mobile-readiness-title'),
+  requirements: document.querySelector('#mobile-requirements'),
   cancelIncidence: document.querySelector('#cancel-incidence'),
   message: document.querySelector('#message'),
 };
@@ -132,12 +141,12 @@ async function api(path, options = {}, retries = 2) {
       }
 
       if (!response.ok) {
-        let fallbackMessage = `El servidor rechaz? la operaci?n (HTTP ${response.status}).`;
+        let fallbackMessage = `El servidor rechazó la operación (HTTP ${response.status}).`;
 
         if (response.status === 413) {
-          fallbackMessage = 'La fotograf?a supera el tama?o m?ximo permitido de 8 MB.';
+          fallbackMessage = 'La fotografía supera el tamaño máximo permitido de 8 MB.';
         } else if (response.status === 400) {
-          fallbackMessage = 'El servidor rechaz? los datos enviados. Revise los campos obligatorios.';
+          fallbackMessage = 'El servidor rechazó los datos enviados. Revise los campos obligatorios.';
         } else if (response.status >= 500) {
           fallbackMessage = `Error interno del servidor (HTTP ${response.status}).`;
         }
@@ -158,18 +167,18 @@ async function api(path, options = {}, retries = 2) {
     } catch (error) {
       lastError = error;
 
-      // Una respuesta HTTP v?lida no es una ca?da de red.
+      // Una respuesta HTTP válida no es una caída de red.
       if (error.status) break;
       if (isIntentionalAbort(error)) break;
 
-      if (!silentNetwork) setNetworkState('Reconectando?');
+      if (!silentNetwork) setNetworkState('Reconectando…');
       if (attempt < retries) await wait(600 * (attempt + 1));
     }
   }
 
   if (lastError?.status || isIntentionalAbort(lastError)) throw lastError;
 
-  if (!silentNetwork) setNetworkState('Sin conexi?n');
+  if (!silentNetwork) setNetworkState('Sin conexión');
   throw createSafeNetworkError();
 }
 
@@ -279,10 +288,16 @@ function setIncidenceMode(active) {
   setButtonContent(elements.incidenceMode, 'warning', active ? 'Incidencia activa' : 'Incidencia');
 }
 
-function renderLastRecord({ code, name, result }) {
+function masterLocationText(asset) {
+  return [asset?.direction, asset?.department, asset?.section].filter(Boolean).join(' → ');
+}
+
+function renderLastRecord({ code, name, result, asset = null }) {
   elements.lastCode.textContent = code || '—';
   elements.lastName.textContent = name || 'Bien sin descripción';
   elements.lastResult.textContent = result;
+  const location = masterLocationText(asset);
+  elements.lastMasterLocation.textContent = location ? `Ubicación según maestro: ${location}` : '';
   elements.lastRecord.hidden = false;
 }
 
@@ -293,6 +308,7 @@ function resetEntryFlow() {
   elements.evidenceStatus.textContent = '';
   elements.evidenceQueue.replaceChildren();
   elements.resultCard.hidden = true;
+  elements.skipOtherLocation.hidden = true;
   state.lookup = null;
   for (const item of state.evidenceQueue) if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
   state.evidenceQueue = [];
@@ -320,6 +336,7 @@ async function registerObservation({ lookup, status, observation = '' }) {
       code: lookup.asset?.assetCode || lookup.code,
       name: lookup.asset?.name || 'Bien físico no registrado',
       result: status === 'verificado' ? 'Encontrado en ubicación correcta' : 'Incidencia registrada',
+      asset: lookup.asset,
     });
     resetEntryFlow();
     message(status === 'verificado' ? 'Bien registrado. Listo para el siguiente código.' : 'Incidencia registrada.');
@@ -330,41 +347,112 @@ async function registerObservation({ lookup, status, observation = '' }) {
 
 function showIncidence(lookup) {
   state.lookup = lookup;
+
   const { asset, classification } = lookup;
+
   elements.status.disabled = false;
-  document.querySelector('#mobile-provisional-fields').hidden = Boolean(asset);
-  document.querySelector('#mobile-discrepancy-fields').hidden = classification !== 'corresponde';
-  if (!asset) document.querySelector('#mobile-provisional-description').focus();
+
+  document.querySelector('#mobile-provisional-fields').hidden =
+    Boolean(asset);
+
+  document.querySelector('#mobile-discrepancy-toggle-row').hidden =
+    !asset;
+
+  document.querySelector('#mobile-has-discrepancy').checked =
+    false;
+
+  document.querySelector('#mobile-discrepancy-fields').hidden =
+    true;
+
+  if (!asset) {
+    document.querySelector(
+      '#mobile-provisional-description',
+    ).focus();
+  }
+
   elements.assetDetails.replaceChildren();
   elements.matchChoices.replaceChildren();
   elements.classification.className = 'classification';
   elements.observationForm.hidden = false;
+
   if (classification === 'corresponde') {
-    elements.classification.classList.add('classification--warning');
-    elements.classification.textContent = 'Incidencia en bien encontrado';
+    elements.classification.classList.add(
+      'classification--warning',
+    );
+    elements.classification.textContent =
+      'Incidencia en bien encontrado';
+
     elements.status.value = 'dato_distinto';
+
   } else if (classification === 'otra_ubicacion') {
-    elements.classification.classList.add('classification--warning');
-    elements.classification.textContent = 'Pertenece a otra ubicación';
+    elements.classification.classList.add(
+      'classification--warning',
+    );
+    elements.classification.textContent =
+      'Pertenece a otra ubicación';
+
     elements.status.value = 'otra_ubicacion';
-    elements.observationForm.querySelector('input[name="situation"][value="otra_ubicacion"]').checked = true;
+
+    elements.observationForm.querySelector(
+      'input[name="situation"][value="otra_ubicacion"]',
+    ).checked = true;
+
   } else {
-    elements.classification.classList.add('classification--unknown');
-    elements.classification.textContent = 'Bien no encontrado en el inventario maestro';
+    elements.classification.classList.add(
+      'classification--unknown',
+    );
+    elements.classification.textContent =
+      'Hallazgo adicional';
+
     elements.status.value = 'desconocido';
     elements.status.disabled = true;
-    elements.observationForm.querySelector('input[name="situation"][value="bien_no_registrado"]').checked = true;
+
+    elements.observationForm.querySelector(
+      'input[name="situation"][value="bien_no_registrado"]',
+    ).checked = true;
   }
-  elements.assetName.textContent = asset?.name || 'Bien no encontrado en el inventario maestro';
-  detail('Código del bien', asset?.assetCode || lookup.code);
+
+  elements.assetName.textContent =
+    asset?.name
+    || (
+      lookup.code
+        ? 'Código no encontrado en el inventario maestro'
+        : 'Hallazgo adicional sin código'
+    );
+
+  if (asset || lookup.code) {
+    detail(
+      'Código del bien',
+      asset?.assetCode || lookup.code,
+    );
+  }
+
   if (asset) {
     detail('Código escáner', asset.scannerCode);
     detail('Marca', asset.brand);
     detail('Modelo', asset.model);
+    detail('UBICACIÓN SEGÚN MAESTRO', masterLocationText(asset));
+    detail('Asignación', classification === 'corresponde'
+      ? '✓ Corresponde a esta sección'
+      : '⚠ Asignado según maestro a otra dependencia');
+    elements.skipOtherLocation.hidden = classification !== 'otra_ubicacion';
   }
+
   elements.resultCard.hidden = false;
-  elements.resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  refreshCaptureProgress();
+
+  elements.resultCard.scrollIntoView({
+    behavior: 'smooth',
+    block: 'start',
+  });
 }
+
+elements.skipOtherLocation.addEventListener('click', () => {
+  const location = masterLocationText(state.lookup?.asset);
+  resetEntryFlow();
+  message(`No se creó una observación. Revise este bien en su sección administrativa${location ? `: ${location}` : '.'}`);
+});
 
 async function handleLookup(lookup) {
   if (lookup.ambiguous) {
@@ -401,7 +489,7 @@ async function handleLookup(lookup) {
   setIncidenceMode(true);
   showIncidence(lookup);
   message(lookup.classification === 'otra_ubicacion'
-    ? 'El bien pertenece a otra ubicación. Complete la incidencia.'
+    ? 'El maestro lo asigna a otra sección. Si está físicamente aquí, registre Otra ubicación; si sólo está comprobando, use No registrar aquí.'
     : 'Complete la incidencia antes de registrar.');
 }
 
@@ -459,12 +547,18 @@ elements.incidenceMode.addEventListener('click', () => {
     };
 
     showIncidence(lookup);
-    document.querySelector('#mobile-label').value = 'sin_etiqueta';
+
+    document.querySelector('#mobile-label').value =
+      'sin_etiqueta';
+
+    refreshCaptureProgress();
   }
 
-  message(state.lookup?.asset
-    ? 'Clasifique la excepci?n.'
-    : 'Hallazgo sin c?digo. Describa el bien y el sistema generar? un identificador provisional.');
+  message(
+    state.lookup?.asset
+      ? 'Clasifique la excepción.'
+      : 'Hallazgo sin código. Describa el bien y el sistema generará un identificador provisional.',
+  );
 });
 
 elements.cancelIncidence.addEventListener('click', () => {
@@ -482,54 +576,190 @@ elements.addEvidence.addEventListener('click', () => {
 });
 
 elements.evidenceFile.addEventListener('change', () => {
-  const type = elements.observationForm.querySelector('input[name="evidence-type"]:checked')?.value;
+  const type = elements.observationForm.querySelector(
+    'input[name="evidence-type"]:checked',
+  )?.value;
+
   if (!type) return;
-  for (const file of [...(elements.evidenceFile.files || [])]) {
-    state.evidenceQueue.push({ file, type, previewUrl: URL.createObjectURL(file) });
+
+  for (const file of [
+    ...(elements.evidenceFile.files || []),
+  ]) {
+    state.evidenceQueue.push({
+      file,
+      type,
+      previewUrl: URL.createObjectURL(file),
+    });
   }
+
   elements.evidenceFile.value = '';
   elements.evidenceQueue.replaceChildren();
-  for (const { file, type: evidenceType, previewUrl } of state.evidenceQueue) {
+
+  for (const {
+    file,
+    type: evidenceType,
+    previewUrl,
+  } of state.evidenceQueue) {
     const item = document.createElement('span');
     item.className = 'evidence-chip';
+
     const preview = document.createElement('img');
-    preview.src = previewUrl; preview.alt = ''; preview.className = 'evidence-chip__preview';
+    preview.src = previewUrl;
+    preview.alt = '';
+    preview.className = 'evidence-chip__preview';
+
     const label = document.createElement('span');
-    label.textContent = `✓ ${evidenceType.replaceAll('_', ' ')} · ${file.name}`;
+    label.textContent =
+      `✓ ${evidenceType.replaceAll('_', ' ')} · ${file.name}`;
+
     item.append(preview, label);
     elements.evidenceQueue.append(item);
   }
-  elements.evidenceStatus.textContent = `${state.evidenceQueue.length} fotografía(s) preparada(s). Puede agregar otra.`;
+
+  elements.evidenceStatus.textContent =
+    `${state.evidenceQueue.length} fotografía(s) preparada(s). Puede agregar otra.`;
+
+  refreshCaptureProgress();
 });
 
 function mobileFieldDetails() {
-  const situations = [...elements.observationForm.querySelectorAll('input[name="situation"]:checked')].map(({ value }) => value);
-  const physicalCondition = document.querySelector('#mobile-physical').value;
-  const discrepancyVisible = !document.querySelector('#mobile-discrepancy-fields').hidden;
+  const situations = [
+    ...elements.observationForm.querySelectorAll(
+      'input[name="situation"]:checked',
+    ),
+  ].map(({ value }) => value);
+
+  const physicalCondition =
+    document.querySelector('#mobile-physical').value;
+
+  const discrepancyIndicated =
+    document.querySelector(
+      '#mobile-has-discrepancy',
+    ).checked;
+
   return {
-    label: document.querySelector('#mobile-label').value,
+    label:
+      document.querySelector('#mobile-label').value,
+
     physicalCondition,
-    functionality: document.querySelector('#mobile-functionality').value,
-    proposedDisposal: document.querySelector('#mobile-disposal').checked,
+
+    functionality:
+      document.querySelector(
+        '#mobile-functionality',
+      ).value,
+
+    proposedDisposal:
+      document.querySelector(
+        '#mobile-disposal',
+      ).checked,
+
+    discrepancyIndicated,
+
     situations,
-    physicalPoint: { type: document.querySelector('#mobile-point').value, reference: document.querySelector('#mobile-point-reference').value },
-    provisional: {
-      description: document.querySelector('#mobile-provisional-description').value,
-      brand: document.querySelector('#mobile-provisional-brand').value,
-      model: document.querySelector('#mobile-provisional-model').value,
-      serialNumber: document.querySelector('#mobile-provisional-serial').value,
-      observedCode: state.lookup?.code || '',
-      pendingIdentification: document.querySelector('#mobile-pending-identification').checked,
+
+    physicalPoint: {
+      type:
+        document.querySelector('#mobile-point').value,
+      reference:
+        document.querySelector(
+          '#mobile-point-reference',
+        ).value,
     },
-    discrepancies: discrepancyVisible ? [{
-      field: document.querySelector('#mobile-discrepancy-field').value,
-      masterValue: '',
-      observedValue: document.querySelector('#mobile-discrepancy-value').value,
-      pendingFromEvidence: document.querySelector('#mobile-discrepancy-evidence').checked,
-    }] : [],
-    incomplete: { parts: physicalCondition === 'incompleto' && document.querySelector('#mobile-incomplete-part').value ? [document.querySelector('#mobile-incomplete-part').value] : [], other: '' },
-    review: { reason: document.querySelector('#mobile-review-reason').value, detail: '' },
-    custody: { destination: document.querySelector('#mobile-custody-destination').value, reference: document.querySelector('#mobile-custody-reference').value, basis: document.querySelector('#mobile-custody-basis').value },
+
+    provisional: {
+      description:
+        document.querySelector(
+          '#mobile-provisional-description',
+        ).value,
+
+      brand:
+        document.querySelector(
+          '#mobile-provisional-brand',
+        ).value,
+
+      model:
+        document.querySelector(
+          '#mobile-provisional-model',
+        ).value,
+
+      serialNumber:
+        document.querySelector(
+          '#mobile-provisional-serial',
+        ).value,
+
+      observedCode:
+        state.lookup?.code || '',
+
+      pendingIdentification:
+        document.querySelector(
+          '#mobile-pending-identification',
+        ).checked,
+    },
+
+    discrepancies: discrepancyIndicated
+      ? [{
+          field:
+            document.querySelector(
+              '#mobile-discrepancy-field',
+            ).value,
+
+          masterValue: '',
+
+          observedValue:
+            document.querySelector(
+              '#mobile-discrepancy-value',
+            ).value,
+
+          pendingFromEvidence:
+            document.querySelector(
+              '#mobile-discrepancy-evidence',
+            ).checked,
+        }]
+      : [],
+
+    incomplete: {
+      parts:
+        physicalCondition === 'incompleto'
+        && document.querySelector(
+          '#mobile-incomplete-part',
+        ).value
+          ? [
+              document.querySelector(
+                '#mobile-incomplete-part',
+              ).value,
+            ]
+          : [],
+
+      other:
+        document.querySelector(
+          '#mobile-incomplete-other',
+        ).value,
+    },
+
+    review: {
+      reason:
+        document.querySelector(
+          '#mobile-review-reason',
+        ).value,
+      detail: '',
+    },
+
+    custody: {
+      destination:
+        document.querySelector(
+          '#mobile-custody-destination',
+        ).value,
+
+      reference:
+        document.querySelector(
+          '#mobile-custody-reference',
+        ).value,
+
+      basis:
+        document.querySelector(
+          '#mobile-custody-basis',
+        ).value,
+    },
   };
 }
 
@@ -570,108 +800,460 @@ elements.lookupForm.addEventListener('submit', async (event) => {
   }
 });
 
+function mobileElementForField(field) {
+  const selectors = {
+    label: '#mobile-label',
+    physicalCondition: '#mobile-physical',
+    functionality: '#mobile-functionality',
+    situations: 'input[name="situation"]',
+    'provisional.description':
+      '#mobile-provisional-description',
+    'physicalPoint.type': '#mobile-point',
+    'physicalPoint.reference':
+      '#mobile-point-reference',
+    discrepancies: '#mobile-discrepancy-value',
+    'incomplete.parts':
+      '#mobile-incomplete-part',
+    'incomplete.other':
+      '#mobile-incomplete-other',
+    'custody.destination':
+      '#mobile-custody-destination',
+    'custody.basis':
+      '#mobile-custody-basis',
+    'review.reason':
+      '#mobile-review-reason',
+  };
+
+  return selectors[field]
+    ? elements.observationForm.querySelector(
+        selectors[field],
+      )
+    : null;
+}
+
 function validateMobileIncidence(details) {
-  const errors = [];
-  const add = (message, element) => errors.push({ message, element });
+  const errors = validateFieldRequirements({
+    assetId: state.lookup?.asset?.id || null,
+    status: elements.status.value,
+    details,
+    isIncidence: true,
+  }).map((error) => ({
+    ...error,
+    element: mobileElementForField(error.field),
+  }));
 
-  const noMasterAsset = !state.lookup?.asset;
+  const evidencePolicy = getFieldEvidencePolicy({
+    assetId: state.lookup?.asset?.id || null,
+    status: elements.status.value,
+    details,
+  });
 
-  if (noMasterAsset && !details.situations.includes('bien_no_registrado')) {
-    add(
-      'Marque "Bien no registrado" para un hallazgo que no pudo asociarse al inventario maestro.',
-      elements.observationForm.querySelector('input[name="situation"][value="bien_no_registrado"]'),
-    );
-  }
-
-  if (noMasterAsset && !details.provisional.description.trim()) {
-    add(
-      'Ingrese una descripci?n del bien adicional.',
-      document.querySelector('#mobile-provisional-description'),
-    );
-  }
-
-  if (!details.physicalPoint.type) {
-    add(
-      'Seleccione el punto f?sico donde se encontr? el bien.',
-      document.querySelector('#mobile-point'),
-    );
-  }
-
-  if (details.physicalPoint.type === 'otro' && !details.physicalPoint.reference.trim()) {
-    add(
-      'Especifique la referencia del punto f?sico.',
-      document.querySelector('#mobile-point-reference'),
-    );
-  }
-
-  if (
-    details.situations.includes('requiere_revision')
-    && !details.review.reason
-  ) {
-    add(
-      'Seleccione el motivo de la revisi?n pendiente.',
-      document.querySelector('#mobile-review-reason'),
-    );
-  }
-
-  if (
-    details.physicalCondition === 'incompleto'
-    && details.incomplete.parts.length === 0
-  ) {
-    add(
-      'Indique qu? componente falta.',
-      document.querySelector('#mobile-incomplete-part'),
-    );
-  }
-
-  const needsCustody = details.situations.some((value) =>
-    ['en_reparacion', 'prestamo_informado', 'traslado_no_regularizado'].includes(value)
+  const evidenceTypes = new Set(
+    state.evidenceQueue.map(({ type }) => type),
   );
 
-  if (needsCustody && !details.custody.destination.trim()) {
-    add(
-      'Indique destino, unidad o persona relacionada con el bien.',
-      document.querySelector('#mobile-custody-destination'),
-    );
-  }
+  for (const requiredType of evidencePolicy.required) {
+    if (evidenceTypes.has(requiredType)) continue;
 
-  if (needsCustody && !details.custody.basis) {
-    add(
-      'Indique si la informaci?n fue informada o verificada.',
-      document.querySelector('#mobile-custody-basis'),
-    );
-  }
+    const label = {
+      bien_completo: 'Bien completo',
+      etiqueta_patrimonial: 'Etiqueta patrimonial',
+      serie_modelo: 'Serie / modelo',
+      dano: 'Daño',
+      ubicacion: 'Ubicación',
+    }[requiredType] || requiredType;
 
-  if (
-    noMasterAsset
-    && !state.evidenceQueue.some(({ type }) => type === 'bien_completo')
-  ) {
-    add(
-      'Este hallazgo sin c?digo requiere una fotograf?a de tipo "Bien completo".',
-      elements.addEvidence,
-    );
+    errors.push({
+      code: `missing_evidence_${requiredType}`,
+      field: `evidence.${requiredType}`,
+      section: 'evidence',
+      message:
+        `Falta evidencia obligatoria: ${label}.`,
+      element: elements.addEvidence,
+    });
   }
 
   for (const { file } of state.evidenceQueue) {
     if (file.size > 8 * 1024 * 1024) {
-      add(
-        `La fotograf?a ${file.name} supera el m?ximo de 8 MB. Tome otra fotograf?a con menor tama?o.`,
-        elements.addEvidence,
-      );
+      errors.push({
+        code: 'evidence_too_large',
+        field: 'evidence',
+        section: 'evidence',
+        message:
+          `La fotografía ${file.name} supera el máximo de 8 MB.`,
+        element: elements.addEvidence,
+      });
       break;
     }
 
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      add(
-        `La fotograf?a ${file.name} no tiene un formato admitido. Use JPEG, PNG o WebP.`,
-        elements.addEvidence,
-      );
+    if (
+      !['image/jpeg', 'image/png', 'image/webp']
+        .includes(file.type)
+    ) {
+      errors.push({
+        code: 'invalid_evidence_type',
+        field: 'evidence',
+        section: 'evidence',
+        message:
+          `La fotografía ${file.name} debe ser JPEG, PNG o WebP.`,
+        element: elements.addEvidence,
+      });
       break;
     }
   }
 
   return errors;
 }
+
+function updateProgressiveVisibility(details) {
+  const hasAsset = Boolean(state.lookup?.asset);
+
+  document.querySelector(
+    '#mobile-provisional-fields',
+  ).hidden = hasAsset;
+
+  const discrepancyToggle =
+    document.querySelector(
+      '#mobile-has-discrepancy',
+    );
+
+  document.querySelector(
+    '#mobile-discrepancy-toggle-row',
+  ).hidden = !hasAsset;
+
+  if (!hasAsset) {
+    discrepancyToggle.checked = false;
+  }
+
+  document.querySelector(
+    '#mobile-discrepancy-fields',
+  ).hidden = !discrepancyToggle.checked;
+
+  const locationRequired =
+    !hasAsset
+    || elements.status.value === 'otra_ubicacion'
+    || details.provisional.pendingIdentification
+    || details.situations.includes(
+      'requiere_revision',
+    )
+    || details.situations.includes(
+      'traslado_no_regularizado',
+    );
+
+  document.querySelector(
+    '#mobile-section-location',
+  ).hidden = !locationRequired;
+
+  const incomplete =
+    details.physicalCondition === 'incompleto';
+
+  document.querySelector(
+    '#mobile-incomplete-fields',
+  ).hidden = !incomplete;
+
+  document.querySelector(
+    '#mobile-incomplete-other-row',
+  ).hidden =
+    !incomplete
+    || document.querySelector(
+      '#mobile-incomplete-part',
+    ).value !== 'otro';
+
+  document.querySelector(
+    '#mobile-review-fields',
+  ).hidden =
+    !details.situations.includes(
+      'requiere_revision',
+    );
+
+  const custodyRequired =
+    details.situations.some((value) =>
+      [
+        'en_reparacion',
+        'prestamo_informado',
+        'traslado_no_regularizado',
+      ].includes(value)
+    );
+
+  document.querySelector(
+    '#mobile-custody-fields',
+  ).hidden = !custodyRequired;
+}
+
+function uniqueMobileErrors(errors) {
+  const seen = new Set();
+
+  return errors.filter((error) => {
+    const key = `${error.code}:${error.field}`;
+
+    if (seen.has(key)) return false;
+
+    seen.add(key);
+    return true;
+  });
+}
+
+
+function refreshEvidenceGuidance(evidencePolicy) {
+  const queuedTypes = new Set(
+    state.evidenceQueue.map(({ type }) => type),
+  );
+
+  const labels = [
+    ...elements.observationForm.querySelectorAll(
+      '.evidence-types label',
+    ),
+  ];
+
+  for (const label of labels) {
+    label.classList.remove(
+      'evidence-type--required',
+      'evidence-type--satisfied',
+    );
+
+    label.querySelector(
+      '.evidence-requirement',
+    )?.remove();
+  }
+
+  const missingRequired = [];
+
+  for (const requiredType of evidencePolicy.required) {
+    const input = elements.observationForm.querySelector(
+      `input[name="evidence-type"][value="${requiredType}"]`,
+    );
+
+    if (!input) continue;
+
+    const label = input.closest('label');
+
+    if (!label) continue;
+
+    const satisfied = queuedTypes.has(requiredType);
+
+    label.classList.add(
+      'evidence-type--required',
+    );
+
+    if (satisfied) {
+      label.classList.add(
+        'evidence-type--satisfied',
+      );
+    } else {
+      missingRequired.push(input);
+    }
+
+    const badge = document.createElement('span');
+
+    badge.className = 'evidence-requirement';
+    badge.textContent = satisfied
+      ? 'LISTA'
+      : 'OBLIGATORIA';
+
+    label.append(badge);
+  }
+
+  const checked = elements.observationForm.querySelector(
+    'input[name="evidence-type"]:checked',
+  );
+
+  if (
+    missingRequired.length > 0
+    && !checked
+  ) {
+    missingRequired[0].checked = true;
+  }
+}
+
+function refreshCaptureProgress() {
+  if (
+    !state.lookup
+    || elements.observationForm.hidden
+  ) {
+    return;
+  }
+
+  let details = mobileFieldDetails();
+
+  updateProgressiveVisibility(details);
+
+  details = mobileFieldDetails();
+
+  const errors = uniqueMobileErrors(
+    validateMobileIncidence(details),
+  );
+
+  elements.observationForm
+    .querySelectorAll('[aria-invalid="true"]')
+    .forEach((control) => {
+      control.removeAttribute('aria-invalid');
+    });
+
+  for (const error of errors) {
+    if (
+      error.element
+      && ['INPUT', 'SELECT', 'TEXTAREA']
+        .includes(error.element.tagName)
+    ) {
+      error.element.setAttribute(
+        'aria-invalid',
+        'true',
+      );
+    }
+  }
+
+  const evidencePolicy = getFieldEvidencePolicy({
+    assetId: state.lookup?.asset?.id || null,
+    status: elements.status.value,
+    details,
+  });
+
+  refreshEvidenceGuidance(evidencePolicy);
+
+  const sections = [
+    ...elements.observationForm.querySelectorAll(
+      '.capture-section[data-section]',
+    ),
+  ];
+
+  for (const section of sections) {
+    if (section.hidden) continue;
+
+    const sectionName = section.dataset.section;
+
+    const status =
+      section.querySelector(
+        '[data-section-status]',
+      );
+
+    const sectionErrors =
+      sectionName === 'confirm'
+        ? errors
+        : errors.filter(
+            (error) =>
+              error.section === sectionName,
+          );
+
+    section.classList.remove(
+      'capture-section--complete',
+      'capture-section--incomplete',
+    );
+
+    if (
+      sectionName === 'evidence'
+      && evidencePolicy.required.length === 0
+      && sectionErrors.length === 0
+      && state.evidenceQueue.length === 0
+    ) {
+      status.textContent = 'Opcional';
+      continue;
+    }
+
+    if (
+      sectionName === 'situation'
+      && sectionErrors.length === 0
+    ) {
+      const visibleSelected = [
+        ...elements.observationForm.querySelectorAll(
+          'input[name="situation"]:checked',
+        ),
+      ].filter(
+        (input) => !input.closest('label')?.hidden,
+      );
+
+      if (visibleSelected.length === 0) {
+        status.textContent = 'Sin adicional';
+        continue;
+      }
+    }
+
+    if (sectionErrors.length > 0) {
+      section.classList.add(
+        'capture-section--incomplete',
+      );
+
+      status.textContent =
+        sectionErrors.length === 1
+          ? 'Falta 1'
+          : `Faltan ${sectionErrors.length}`;
+
+      continue;
+    }
+
+    section.classList.add(
+      'capture-section--complete',
+    );
+    status.textContent = '✓ Completo';
+  }
+
+  elements.requirements.replaceChildren();
+
+  const submitButton =
+    elements.observationForm.querySelector(
+      'button[type="submit"]',
+    );
+
+  submitButton.disabled =
+    state.registrationInProgress
+    || errors.length > 0;
+
+  elements.readiness.classList.toggle(
+    'capture-readiness--ready',
+    errors.length === 0,
+  );
+
+  elements.readiness.classList.toggle(
+    'capture-readiness--blocked',
+    errors.length > 0,
+  );
+
+  if (errors.length === 0) {
+    elements.readinessTitle.textContent =
+      '✓ LISTO PARA GUARDAR';
+
+    const ready =
+      document.createElement('p');
+
+    ready.textContent =
+      'Los datos mínimos obligatorios están completos.';
+
+    elements.requirements.append(ready);
+    return;
+  }
+
+  elements.readinessTitle.textContent =
+    `FALTAN ${errors.length} ${
+      errors.length === 1
+        ? 'DATO'
+        : 'DATOS'
+    } PARA GUARDAR`;
+
+  for (const error of errors) {
+    const button =
+      document.createElement('button');
+
+    button.type = 'button';
+    button.className = 'requirement-link';
+    button.textContent =
+      `● ${error.message}`;
+
+    button.addEventListener('click', () => {
+      showMobileValidationError(error);
+    });
+
+    elements.requirements.append(button);
+  }
+}
+
+elements.observationForm.addEventListener(
+  'input',
+  refreshCaptureProgress,
+);
+
+elements.observationForm.addEventListener(
+  'change',
+  refreshCaptureProgress,
+);
 
 function showMobileValidationError(error) {
   message(error.message, true);
@@ -700,7 +1282,7 @@ elements.observationForm.addEventListener('submit', async (event) => {
 
   const submitButton = elements.observationForm.querySelector('button[type="submit"]');
 
-  message('Validando incidencia?');
+  message('Validando incidencia…');
 
   const details = mobileFieldDetails();
 
@@ -735,8 +1317,8 @@ elements.observationForm.addEventListener('submit', async (event) => {
 
   state.registrationInProgress = true;
   submitButton.disabled = true;
-  setButtonContent(submitButton, 'check', 'Guardando?');
-  message('Guardando incidencia?');
+  setButtonContent(submitButton, 'check', 'Guardando…');
+  message('Guardando incidencia…');
 
   try {
     const lookup = state.lookup;
@@ -761,7 +1343,7 @@ elements.observationForm.addEventListener('submit', async (event) => {
       result.observation.provisionalCode
       || lookup.asset?.assetCode
       || lookup.code
-      || 'Sin c?digo';
+      || 'Sin código';
 
     renderSummary(result.summary);
 
@@ -770,8 +1352,9 @@ elements.observationForm.addEventListener('submit', async (event) => {
       name:
         lookup.asset?.name
         || details.provisional.description
-        || 'Bien f?sico no registrado',
+        || 'Bien físico no registrado',
       result: 'Incidencia registrada',
+      asset: lookup.asset,
     });
 
     resetEntryFlow();
@@ -783,8 +1366,12 @@ elements.observationForm.addEventListener('submit', async (event) => {
     handleMobileError(error);
   } finally {
     state.registrationInProgress = false;
-    submitButton.disabled = false;
-    setButtonContent(submitButton, 'check', 'Guardar incidencia');
+    setButtonContent(
+      submitButton,
+      'check',
+      'Guardar incidencia',
+    );
+    refreshCaptureProgress();
   }
 });
 

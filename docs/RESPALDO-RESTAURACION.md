@@ -1,142 +1,117 @@
 # Respaldo, restauración y traslado
 
-Inventario Terreno utiliza SQLite para el estado operacional y archivos locales para evidencia fotográfica.
+El mecanismo canónico de continuidad de Inventario Terreno es el **respaldo operacional**. Reúne una instantánea coherente de SQLite, toda la evidencia referenciada y un manifiesto verificable.
 
-## 1. Respaldo de SQLite
+## 1. Crear y verificar el respaldo canónico
 
-Desde la raíz del proyecto:
+Con el servidor detenido al cierre de jornada:
 
 ```powershell
-npm.cmd run backup
+npm.cmd run backup:operational
+npm.cmd run backup:verify
 ```
 
-El comando usa la API de respaldo de SQLite y crea una copia coherente en:
+Cada directorio `backups\operational\backup-...` contiene:
 
 ```text
-backups/
-```
-
-No elimina respaldos anteriores.
-
-## 2. Respaldo operacional completo
-
-Si una jornada contiene fotografías, un respaldo completo debe contemplar:
-
-```text
-SQLite
-+
+inventario.sqlite
 evidence/
+manifest.json
 ```
 
-La base guarda referencias y metadatos de evidencia, pero las imágenes permanecen como archivos locales.
+`manifest.json` registra SHA-256 y tamaño de SQLite, conteos operacionales, y tamaño, SHA-256 y ruta relativa de cada evidencia. Un respaldo con resultado distinto de `PASS` no debe transferirse ni restaurarse.
 
-Por tanto:
+## 2. Verificar un respaldo específico
 
-- copiar sólo SQLite conserva sesiones, observaciones y metadatos;
-- copiar SQLite + `evidence/` conserva también la evidencia visual.
+`backup:verify` comprueba el respaldo operacional más reciente. Para una copia descargada o una ruta concreta use:
 
-## 3. Momento recomendado
+```powershell
+node .\src\database\operational-backup.js verify "D:\RESPALDOS\backup-XXXXXXXX"
+```
 
-Antes de una jornada:
+La verificación es de sólo lectura y controla el manifiesto, SQLite, `integrity_check`, `foreign_key_check`, conteos, evidencias y la integridad operacional.
+
+## 3. Empaquetar para almacenamiento externo
+
+```powershell
+npm.cmd run backup:package
+```
+
+Para indicar una fuente concreta:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\package-operational-backup.ps1 `
+  -BackupPath "D:\RESPALDOS\backup-XXXXXXXX"
+```
+
+La utilidad verifica primero la fuente y crea en `backups\packages\`:
+
+```text
+backup-XXXXXXXX.zip
+backup-XXXXXXXX.zip.sha256.txt
+```
+
+No sube archivos ni guarda credenciales. El operador debe custodiar ambos archivos en almacenamiento privado y comparar el SHA-256 después de cada transferencia.
+
+## 4. Restauración operacional segura
+
+En una instalación nueva, con el servidor detenido y sin datos de destino:
+
+```powershell
+node .\src\database\operational-backup.js restore `
+  "D:\RESPALDOS\backup-XXXXXXXX" `
+  "C:\NuevaInstalacion\inventario-terreno" `
+  --confirm
+```
+
+El restaurador:
+
+- verifica completamente el respaldo antes de copiar;
+- se niega si `TARGET\data\inventario.sqlite` existe;
+- se niega si `TARGET\data` o `TARGET\evidence` contienen archivos;
+- copia sólo a un staging temporal dentro de `TARGET`;
+- conserva las rutas relativas de evidencia;
+- verifica SHA-256, SQLite, claves foráneas, conteos, evidencias e integridad de campo;
+- publica `data/` y `evidence/` sólo después de un `PASS` completo;
+- no modifica ni elimina el backup fuente.
+
+Nunca mezcle dos bases SQLite ni fusione carpetas de evidencia.
+
+## 5. Ensayo de recuperación
+
+```powershell
+npm.cmd run recovery:drill
+```
+
+Para una fuente concreta:
+
+```powershell
+npm.cmd run recovery:drill -- --backup "D:\RESPALDOS\backup-XXXXXXXX"
+```
+
+El ensayo restaura en un directorio temporal, verifica el resultado y lo limpia al terminar. `--keep` conserva explícitamente el temporal para diagnóstico.
+
+## 6. Comando antiguo LEGACY
 
 ```powershell
 npm.cmd run backup
 ```
 
-Después de cerrar las sesiones de la jornada:
+Este comando es **LEGACY / respaldo SQLite simple**. Se conserva por compatibilidad, pero no incluye evidencia ni `manifest.json` y no es el procedimiento principal de recuperación ante desastre. Del mismo modo, `setup.ps1 -Mode RESTAURAR` restaura sólo una SQLite autorizada y no reemplaza al restaurador operacional integrado.
+
+## 7. Después de restaurar
 
 ```powershell
-npm.cmd run backup
+npm.cmd run verify:field
+npm.cmd test
+npm.cmd run test:mobile
+npm.cmd run release:check
 ```
 
-Para un traslado de equipo, detenga primero el servidor.
-
-## 4. Hash SHA-256
-
-Calcule una huella antes de transferir:
-
-```powershell
-Get-FileHash -Algorithm SHA256 -LiteralPath '.\backups\inventario-AAAA-MM-DD....sqlite'
-```
-
-Repita en el equipo destino y compare.
-
-Para un conjunto de evidencias, conserve la carpeta sin renombrar internamente sus archivos.
-
-## 5. Restaurar en un equipo nuevo
-
-No coloque una base sobre otra existente.
-
-Primero confirme:
-
-```powershell
-Test-Path .\data\inventario.sqlite
-```
-
-Debe devolver `False` antes de restaurar mediante el asistente seguro.
-
-Luego:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1 `
-  -Mode RESTAURAR `
-  -RestoreDatabasePath 'D:\RUTA-AUTORIZADA\inventario.sqlite' `
-  -ConfirmDataOperation
-```
-
-El script valida la fuente SQLite antes de copiarla y se detiene si ya existe una base destino.
-
-## 6. Restaurar evidencia
-
-Con el servidor detenido, copie la carpeta de evidencia autorizada a:
-
-```text
-evidence/
-```
-
-Mantenga la estructura relativa original. No reorganice ni renombre fotografías manualmente.
-
-Después inicie el sistema y compruebe desde los informes que las evidencias se abren correctamente.
-
-## 7. Verificar integridad de SQLite
-
-```powershell
-node --input-type=module -e "import Database from 'better-sqlite3'; const db=new Database('data/inventario.sqlite',{readonly:true,fileMustExist:true}); console.log(db.pragma('integrity_check',{simple:true})); db.close();"
-```
-
-El resultado esperado es:
-
-```text
-ok
-```
+Luego inicie con `Iniciar Inventario Terreno.cmd`, compruebe `http://localhost:3180` y cree inmediatamente un nuevo respaldo operacional.
 
 ## 8. Qué no forma parte del respaldo operacional
 
-No incluya automáticamente:
+No incluya automáticamente certificados, claves privadas, tokens, `.env`, cachés, `node_modules/` ni el código fuente como sustituto de GitHub.
 
-- `node_modules/`;
-- certificados HTTPS de otro equipo;
-- claves privadas;
-- cachés;
-- código fuente como sustituto de GitHub.
-
-El código se recupera desde GitHub. Los datos se recuperan desde respaldos privados.
-
-## 9. Recuperación ante fallo del notebook
-
-En otro Windows compatible:
-
-1. clone el código desde GitHub;
-2. ejecute `npm.cmd ci`;
-3. ejecute las pruebas;
-4. restaure SQLite mediante `setup.ps1 -Mode RESTAURAR`;
-5. restaure `evidence/` por separado;
-6. configure HTTPS local si se utilizará el teléfono;
-7. ejecute `verify.ps1`;
-8. inicie con `Iniciar Inventario Terreno.cmd`.
-
-## 10. Nunca fusionar bases manualmente
-
-No copie tablas ni combine dos SQLite con herramientas externas durante una recuperación normal.
-
-Si existen dos bases divergentes, consérvelas separadas y diseñe un procedimiento específico de conciliación antes de modificar cualquiera de ellas.
+El software se recupera desde GitHub. SQLite y fotografías se recuperan desde un respaldo operacional privado verificado. El procedimiento completo para pérdida total está en [RECUPERACION-DESASTRE.md](RECUPERACION-DESASTRE.md).
