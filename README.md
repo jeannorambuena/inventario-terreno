@@ -242,3 +242,15 @@ Documentación de cierre:
 - [Operación diaria](docs/OPERACION-DIARIA.md).
 - [Checklist y congelamiento Release 1.0](docs/RELEASE-1.0.md).
 - [Respaldo y restauración](docs/RESPALDO-RESTAURACION.md).
+- [Recuperación ante pérdida total](docs/RECUPERACION-DESASTRE.md).
+
+El respaldo canónico reúne SQLite, evidencias y `manifest.json`:
+
+```powershell
+npm.cmd run backup:operational
+npm.cmd run backup:verify
+npm.cmd run backup:package
+npm.cmd run recovery:drill
+```
+
+`npm.cmd run backup` queda disponible únicamente como respaldo SQLite simple **LEGACY**; no sustituye el respaldo operacional.

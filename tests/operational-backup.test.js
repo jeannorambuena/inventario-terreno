@@ -12,11 +12,16 @@ import {
 } from 'node:fs';
 
 import {
+  execFileSync,
+} from 'node:child_process';
+
+import {
   tmpdir,
 } from 'node:os';
 
 import {
   join,
+  resolve,
 } from 'node:path';
 
 import {
@@ -34,8 +39,13 @@ import {
 import {
   createOperationalBackup,
   latestOperationalBackup,
+  restoreOperationalBackup,
   verifyOperationalBackup,
 } from '../src/database/operational-backup.js';
+
+import {
+  runRecoveryDrill,
+} from '../scripts/recovery-drill.js';
 
 
 let root;
@@ -537,6 +547,201 @@ describe(
         ).toBe(
           latestResult.backupDir,
         );
+      },
+    );
+
+
+    test(
+      'detects manifest count tampering',
+      async () => {
+        const result = await createOperationalBackup({
+          sourcePath: databasePath,
+          evidenceRoot,
+          backupRoot,
+          now: new Date('2026-08-19T12:06:00.000Z'),
+        });
+        const manifestPath = join(result.backupDir, 'manifest.json');
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+        manifest.counts.assets = 99;
+        writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+
+        const verification = verifyOperationalBackup(result.backupDir);
+        expect(verification.status).toBe('FAIL');
+        expect(verification.checks).toContainEqual(expect.objectContaining({
+          name: 'Conteos del manifest',
+          status: 'FAIL',
+        }));
+      },
+    );
+
+
+    test(
+      'restores verified data and evidence into an empty installation',
+      async () => {
+        const evidence = addHistoricalEvidence();
+        const result = await createOperationalBackup({
+          sourcePath: databasePath,
+          evidenceRoot,
+          backupRoot,
+          now: new Date('2026-08-19T12:07:00.000Z'),
+        });
+        const targetRoot = join(root, 'restored-installation');
+        const restored = restoreOperationalBackup({
+          backupDir: result.backupDir,
+          targetRoot,
+          confirm: true,
+        });
+
+        expect(restored.status).toBe('PASS');
+        expect(existsSync(join(targetRoot, 'data', 'inventario.sqlite'))).toBe(true);
+        expect(readFileSync(join(targetRoot, 'evidence', ...evidence.relativePath.split('/'))))
+          .toEqual(evidence.payload);
+        expect(existsSync(join(result.backupDir, 'manifest.json'))).toBe(true);
+      },
+    );
+
+
+    test(
+      'requires explicit confirmation before restoring',
+      async () => {
+        const result = await createOperationalBackup({
+          sourcePath: databasePath,
+          evidenceRoot,
+          backupRoot,
+          now: new Date('2026-08-19T12:07:30.000Z'),
+        });
+        const targetRoot = join(root, 'unconfirmed-installation');
+
+        expect(() => restoreOperationalBackup({
+          backupDir: result.backupDir,
+          targetRoot,
+        })).toThrow(/confirmacion explicita/);
+        expect(existsSync(join(targetRoot, 'data', 'inventario.sqlite'))).toBe(false);
+      },
+    );
+
+
+    test(
+      'refuses to overwrite an existing database',
+      async () => {
+        const result = await createOperationalBackup({
+          sourcePath: databasePath,
+          evidenceRoot,
+          backupRoot,
+          now: new Date('2026-08-19T12:08:00.000Z'),
+        });
+        const targetRoot = join(root, 'occupied-database');
+        mkdirSync(join(targetRoot, 'data'), { recursive: true });
+        writeFileSync(join(targetRoot, 'data', 'inventario.sqlite'), 'existing');
+
+        expect(() => restoreOperationalBackup({
+          backupDir: result.backupDir,
+          targetRoot,
+          confirm: true,
+        })).toThrow(/ya existe/);
+        expect(readFileSync(join(targetRoot, 'data', 'inventario.sqlite'), 'utf8')).toBe('existing');
+      },
+    );
+
+
+    test(
+      'refuses to merge evidence into an occupied destination',
+      async () => {
+        const result = await createOperationalBackup({
+          sourcePath: databasePath,
+          evidenceRoot,
+          backupRoot,
+          now: new Date('2026-08-19T12:09:00.000Z'),
+        });
+        const targetRoot = join(root, 'occupied-evidence');
+        mkdirSync(join(targetRoot, 'evidence'), { recursive: true });
+        writeFileSync(join(targetRoot, 'evidence', 'existing.jpg'), 'existing');
+
+        expect(() => restoreOperationalBackup({
+          backupDir: result.backupDir,
+          targetRoot,
+          confirm: true,
+        })).toThrow(/evidence contiene datos/);
+        expect(existsSync(join(targetRoot, 'data', 'inventario.sqlite'))).toBe(false);
+      },
+    );
+
+
+    test(
+      'leaves no partial target when source verification fails',
+      async () => {
+        const evidence = addHistoricalEvidence();
+        const result = await createOperationalBackup({
+          sourcePath: databasePath,
+          evidenceRoot,
+          backupRoot,
+          now: new Date('2026-08-19T12:10:00.000Z'),
+        });
+        writeFileSync(
+          join(result.backupDir, 'evidence', ...evidence.relativePath.split('/')),
+          'tampered',
+        );
+        const targetRoot = join(root, 'failed-restore');
+
+        expect(() => restoreOperationalBackup({
+          backupDir: result.backupDir,
+          targetRoot,
+          confirm: true,
+        })).toThrow(/no supera la verificacion/);
+        expect(existsSync(join(targetRoot, 'data', 'inventario.sqlite'))).toBe(false);
+        expect(existsSync(join(targetRoot, 'evidence'))).toBe(false);
+      },
+    );
+
+
+    test(
+      'runs a complete recovery drill and cleans its temporary installation',
+      async () => {
+        addHistoricalEvidence();
+        const result = await createOperationalBackup({
+          sourcePath: databasePath,
+          evidenceRoot,
+          backupRoot,
+          now: new Date('2026-08-19T12:11:00.000Z'),
+        });
+
+        const drill = runRecoveryDrill({ backupDir: result.backupDir });
+        expect(drill.status).toBe('PASS');
+        expect(drill.verification.counts.assets).toBe(1);
+        expect(drill.verification.fieldIntegrity.status).toBe('PASS');
+        expect(existsSync(drill.drillRoot)).toBe(false);
+      },
+    );
+
+
+    test.runIf(process.platform === 'win32')(
+      'packages a verified operational backup with a zip hash',
+      async () => {
+        const result = await createOperationalBackup({
+          sourcePath: databasePath,
+          evidenceRoot,
+          backupRoot,
+          now: new Date('2026-08-19T12:12:00.000Z'),
+        });
+        const outputRoot = join(root, 'packages');
+
+        const output = execFileSync('powershell.exe', [
+          '-NoProfile',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          resolve('scripts', 'package-operational-backup.ps1'),
+          '-BackupPath',
+          result.backupDir,
+          '-OutputRoot',
+          outputRoot,
+        ], { cwd: resolve('.'), encoding: 'utf8' });
+
+        const zipPath = join(outputRoot, 'backup-20260819-121200000Z.zip');
+        expect(output).toContain('PAQUETE OPERACIONAL: PASS');
+        expect(existsSync(zipPath)).toBe(true);
+        expect(readFileSync(`${zipPath}.sha256.txt`, 'utf8'))
+          .toMatch(/^[a-f0-9]{64} \*backup-20260819-121200000Z\.zip/m);
       },
     );
   },

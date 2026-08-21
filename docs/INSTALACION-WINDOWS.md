@@ -140,7 +140,20 @@ El script se detiene si ya existe `imports/ACTIVOS.xlsx` o `data/inventario.sqli
 
 ### B. RESTAURAR
 
-Se utiliza para trasladar una base SQLite existente desde otro equipo.
+El procedimiento principal restaura un backup operacional verificado que contiene SQLite, evidencia y `manifest.json`:
+
+```powershell
+node .\src\database\operational-backup.js verify `
+  'D:\RUTA-AUTORIZADA\backup-XXXXXXXX'
+node .\src\database\operational-backup.js restore `
+  'D:\RUTA-AUTORIZADA\backup-XXXXXXXX' `
+  (Get-Location).Path `
+  --confirm
+```
+
+Nunca restaure encima de una base existente ni fusione carpetas de evidencia. El restaurador verifica antes, usa staging y vuelve a verificar después de publicar `data/` y `evidence/`.
+
+La ruta antigua:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1 `
@@ -149,16 +162,9 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1 `
   -ConfirmDataOperation
 ```
 
-Nunca restaure encima de una base existente.
+es **LEGACY / restauración SQLite simple**. No recupera `evidence/` ni `manifest.json` y no es suficiente para disaster recovery.
 
-Una restauración operacional completa puede requerir además copiar, por separado y conservando su estructura relativa:
-
-- `evidence/` si existen fotografías/evidencias;
-- `imports/ACTIVOS.xlsx` si se desea conservar la fuente maestra utilizada;
-- `backups/` si se desea conservar el histórico de respaldos;
-- `exports/` si existen salidas operacionales que deban mantenerse.
-
-El comando de restauración SQLite no restaura automáticamente esas carpetas.
+Consulte [RESPALDO-RESTAURACION.md](RESPALDO-RESTAURACION.md) y, para pérdida total, [RECUPERACION-DESASTRE.md](RECUPERACION-DESASTRE.md).
 
 ## 5. Datos privados
 
@@ -268,7 +274,7 @@ Si el teléfono no conecta:
 5. revise Firewall de Windows para redes privadas;
 6. genere un enlace móvil nuevo.
 
-El teléfono es auxiliar: si falla, la oficina puede terminarse desde el notebook.
+El teléfono es auxiliar: si falla, la oficina puede terminarse desde el notebook. Al reemplazarlo genere una identidad auxiliar y un enlace móvil nuevos; no necesita el `deviceId` ni tokens anteriores para restaurar SQLite o fotografías.
 
 ## 10. Verificación de SQLite
 

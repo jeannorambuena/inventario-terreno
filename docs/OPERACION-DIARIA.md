@@ -134,7 +134,15 @@ Primero verificar el respaldo:
 npm.cmd run backup:verify
 ```
 
-La restauración no debe hacerse sobre una base existente ni combinar dos SQLite manualmente. Seguir `docs/RESPALDO-RESTAURACION.md` y conservar la copia afectada antes de cualquier restauración.
+Para verificar una ruta recibida:
+
+```powershell
+node .\src\database\operational-backup.js verify "D:\RESPALDOS\backup-XXXXXXXX"
+```
+
+La restauración no debe hacerse sobre una base existente ni combinar dos SQLite manualmente. Use el restaurador operacional descrito en [RESPALDO-RESTAURACION.md](RESPALDO-RESTAURACION.md). Para pérdida total del equipo siga [RECUPERACION-DESASTRE.md](RECUPERACION-DESASTRE.md).
+
+El teléfono original no contiene estado indispensable para recuperar el sistema: las evidencias confirmadas viven en el respaldo. En un teléfono nuevo genere una identidad auxiliar y un enlace temporal nuevos; nunca reutilice tokens anteriores.
 
 ## 11. Acciones prohibidas durante operación normal
 

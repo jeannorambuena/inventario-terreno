@@ -47,6 +47,8 @@ npm test
 
 Ningún FAIL puede ignorarse para etiquetar v1.0.0.
 
+Antes de una liberación formal también debe ejecutarse `npm.cmd run recovery:drill` sobre un respaldo operacional verificado. El procedimiento de pérdida total se mantiene en [RECUPERACION-DESASTRE.md](RECUPERACION-DESASTRE.md).
+
 ## 3. Checklist técnico
 
 - [ ] Suite completa PASS.

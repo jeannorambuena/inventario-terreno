@@ -166,6 +166,18 @@ Detenga el servidor y no siga registrando datos.
 
 Ejecute una comprobación de sólo lectura sobre una copia o respaldo autorizado. Si `integrity_check` no devuelve `ok`, no sobrescriba el archivo original.
 
+## El respaldo o la restauración operacional falla
+
+No copie manualmente los archivos para evitar la validación. Ejecute la verificación específica y revise el primer control en `FAIL`:
+
+```powershell
+node .\src\database\operational-backup.js verify "D:\RESPALDOS\backup-XXXXXXXX"
+```
+
+Si la restauración informa que `data\inventario.sqlite`, `data/` o `evidence/` ya contienen datos, use otra instalación vacía o preserve y escale la instalación existente. No fusione dos bases ni dos carpetas de evidencia.
+
+Si `backup:package` informa que el ZIP ya existe, conserve el paquete anterior o elija otra carpeta de salida; la utilidad no sobrescribe paquetes.
+
 ## Una fotografía aparece como no disponible
 
 No copie o renombre manualmente archivos dentro de `evidence/`.

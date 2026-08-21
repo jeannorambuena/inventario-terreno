@@ -44,7 +44,7 @@ Realizar una vez mientras todavía se dispone de Internet y tiempo de soporte.
 1. Tener el repositorio y dependencias ya instalados.
 2. Tener la base SQLite, `ACTIVOS.xlsx` y `evidence/` restaurados.
 3. Ejecutar `scripts/verify.ps1` y obtener todos los controles en `PASS`.
-4. Crear un respaldo SQLite reciente.
+4. Crear y verificar un respaldo operacional reciente.
 5. Configurar en el Samsung un hotspot con nombre y clave conocidos.
 6. Conectar el notebook al hotspot al menos una vez para que Windows guarde el perfil.
 7. Marcar esa red como **Privada** en Windows, porque es una red personal controlada por el usuario.
@@ -309,17 +309,16 @@ No abandone una oficina sólo porque el teléfono falló. La autoridad de cierre
 
 ```powershell
 cd C:\Users\<USUARIO>\Proyectos\inventario-terreno
-npm.cmd run backup
+npm.cmd run backup:operational
+npm.cmd run backup:verify
 ```
 
-4. Recuerde que el respaldo SQLite no sustituye a `evidence/` cuando existen fotografías.
-5. Para un respaldo operacional completo conserve de forma consistente:
+4. El respaldo operacional ya reúne la SQLite, la evidencia referenciada y `manifest.json`.
+5. Custodie fuera del notebook un paquete creado con `npm.cmd run backup:package`; no copie manualmente componentes separados como mecanismo principal.
 
 ```text
-data\inventario.sqlite
-backups\
-evidence\
-imports\ACTIVOS.xlsx
+backup-XXXXXXXX.zip
+backup-XXXXXXXX.zip.sha256.txt
 ```
 
 6. No copie estos datos a GitHub.
