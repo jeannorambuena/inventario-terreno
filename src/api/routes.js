@@ -191,6 +191,7 @@ function assetProjection() {
       a.asset_code AS assetCode,
       a.scanner_code AS scannerCode,
       a.name,
+      a.description,
       a.brand,
       a.serial_number AS serialNumber,
       a.model,
@@ -1999,9 +2000,11 @@ export function createApiRouter(database, {
       WHERE a.asset_code LIKE ? ESCAPE '\\'
          OR a.scanner_code LIKE ? ESCAPE '\\'
          OR a.name LIKE ? ESCAPE '\\'
+         OR a.description LIKE ? ESCAPE '\\'
+         OR a.serial_number LIKE ? ESCAPE '\\'
       ORDER BY a.asset_code
       LIMIT 50
-    `).all(pattern, pattern, pattern);
+    `).all(pattern, pattern, pattern, pattern, pattern);
     return response.json({ assets });
   });
 
