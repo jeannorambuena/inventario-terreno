@@ -27,13 +27,17 @@ Si `better-sqlite3` no dispone de binario compatible y `npm.cmd ci` informa `gyp
 
 ## PASO 5 — Clonar el software
 
+`main` es la rama principal y canónica de recuperación.
+
 ```powershell
 git clone https://github.com/jeannorambuena/inventario-terreno.git
 cd .\inventario-terreno
-git switch feature/field-ux-integrity
+git switch main
+git branch --show-current
+git status --short
 ```
 
-Mientras `main` siga atrasado respecto de producción, use explícitamente `feature/field-ux-integrity`. No asuma `main` hasta que exista una liberación formal.
+El resultado de `git branch --show-current` debe ser `main`. No cambie a una rama `feature/*` durante una recuperación normal salvo que exista una instrucción técnica posterior, explícita y documentada.
 
 ## PASO 6 — Instalar dependencias
 
