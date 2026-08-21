@@ -27,7 +27,9 @@ describe('disaster recovery documentation', () => {
 
     expect(installation).toContain('### B. RESTAURAR');
     expect(installation).toContain('operational-backup.js restore');
-    expect(disaster).toContain('git switch feature/field-ux-integrity');
+    expect(disaster).toContain('git switch main');
+    expect(disaster).toContain('main` es la rama principal y canónica de recuperación');
+    expect(disaster).not.toContain('git switch feature/field-ux-integrity');
     expect(disaster).toContain('## PASO 19');
     expect(disaster).toContain('## RPO');
     expect(disaster).toContain('## RTO');
